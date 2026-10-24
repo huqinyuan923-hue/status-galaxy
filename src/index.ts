@@ -50,7 +50,7 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 app.get('/galaxy', async (c) => {
   const rows = await c.env.DB
-    .prepare('SELECT id, ts, payload_json FROM snapshots ORDER BY id DESC LIMIT 25')
+    .prepare('SELECT id, ts, payload_json FROM snapshots ORDER BY id DESC LIMIT 48')
     .all<SnapshotRow>();
   const list = rows.results ?? [];
   if (list.length === 0) return c.json({ latest: null, history: [], bodies: BODIES });

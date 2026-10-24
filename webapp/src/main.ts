@@ -403,7 +403,10 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
     const trail = new THREE.Points(trailGeo, new THREE.PointsMaterial({
       color: alive === false ? 0xff4455 : color, // 掉线星球拖尾红警
-      transparent: true, opacity: 0.3, size: 0.16,
+      transparent: true,
+      // 延迟越高尾越淡（健康信号），暗星常态极淡
+      opacity: alive === false ? 0.18 : body.kind === 'dark' ? 0.08 : Math.max(0.12, 0.34 - (site?.latencyMs ?? 200) / 4000),
+      size: 0.16,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     trail.visible = !lowMode;
@@ -445,14 +448,28 @@ function showCard(body: FixtureBody) {
     site?.alive ? `<dd class="ok">在线 ${site.status} · ${site.latencyMs}ms</dd>` :
     '<dd class="bad">离线 / 超时</dd>';
 
-  // 历史在线率（近 N 次采集）
+  // 在线率：按日聚合（今日/昨日），采集时间戳含日期
   let uptimeLine = '';
   if (body.kind !== 'dark') {
     const hist = data.history.filter((h) => h.sites.some((s) => s.id === body.id));
     if (hist.length >= 2) {
-      const up = hist.filter((h) => h.sites.find((s) => s.id === body.id)?.alive).length;
-      const pct = Math.round((up / hist.length) * 100);
-      uptimeLine = `<dt>近${hist.length}次在线</dt><dd class="${pct >= 90 ? 'ok' : pct >= 50 ? 'dim' : 'bad'}">${pct}%</dd>`;
+      const dayKey = (ts: string) => ts.slice(0, 10);
+      const today = dayKey(new Date().toISOString());
+      const todayRows = hist.filter((h) => dayKey(h.ts) === today);
+      const yesterdayRows = hist.filter((h) => dayKey(h.ts) === dayKey(new Date(Date.now() - 86_400_000).toISOString()));
+      const fmt = (rows: typeof hist): { n: number; pct: number } | null => {
+        if (rows.length === 0) return null;
+        const up = rows.filter((h) => h.sites.find((s) => s.id === body.id)?.alive).length;
+        return { n: rows.length, pct: Math.round((up / rows.length) * 100) };
+      };
+      const t = fmt(todayRows);
+      const y = fmt(yesterdayRows);
+      const cls = (p: number) => (p >= 90 ? 'ok' : p >= 50 ? 'dim' : 'bad');
+      if (t && y) {
+        uptimeLine = `<dt>在线率</dt><dd><span class="${cls(t.pct)}">${t.pct}%</span>(${t.n}) · 昨 <span class="${cls(y.pct)}">${y.pct}%</span>(${y.n})</dd>`;
+      } else if (t) {
+        uptimeLine = `<dt>今日在线</dt><dd class="${cls(t.pct)}">${t.pct}%(${t.n} 采)</dd>`;
+      }
     }
   }
 
@@ -584,7 +601,7 @@ async function loadData(): Promise<void> {
   const stale = ageMin > 35 ? ` · 数据较旧(${Math.round(ageMin)}分前)` : '';
   const prefix = usingFixture ? '示例数据 · ' : '';
   document.getElementById('hud-meta')!.textContent =
-    `${prefix}${total} 个天体 · ${alive} 在线 · 更新于 ${new Date(latest.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}${stale}`;
+    `${prefix}${total} 个天体 · ${alive} 在线 · ${data.history.length} 次采集 · 更新于 ${new Date(latest.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}${stale}`;
 }
 
 /** 内嵌兜底目录（真实目录由 /api/galaxy 的 bodies 字段下发，单一事实源在 Worker src/bodies.ts） */
