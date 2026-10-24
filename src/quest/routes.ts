@@ -66,6 +66,14 @@ questRoute.get('/board', async (c) => {
   await db.prepare('UPDATE explorers SET last_seen = ?1 WHERE id = ?2').bind(nowIso(), explorerId).run();
 
   const progress = levelProgress(me.dust);
+
+  // 同场探索者：最近 10 分钟活跃的别人（星图在场感显示）
+  const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  const othersRows = await db
+    .prepare('SELECT id, name, level FROM explorers WHERE id != ?1 AND last_seen >= ?2 ORDER BY last_seen DESC LIMIT 8')
+    .bind(explorerId, tenMinAgo)
+    .all<{ id: number; name: string; level: number }>();
+
   return c.json({
     quests: quests.map((q) => ({ ...q, done: doneMap.has(q.id), doneAt: doneMap.get(q.id) ?? null })),
     me: {
@@ -78,6 +86,7 @@ questRoute.get('/board', async (c) => {
       supernova: isSupernova(new Set(doneMap.keys())),
       doneCount: doneMap.size,
     },
+    others: othersRows.results ?? [],
   });
 });
 

@@ -678,6 +678,30 @@ initQuestPanel({
 });
 void refreshQuestBoard();
 let me: BoardResponse['me'] = null;
+/** 同场探索者标记（飞船旁边的小光点 + 名字） */
+let otherMarkers: Array<{ sprite: THREE.Sprite; angle: number; radius: number; speed: number; name: string }> = [];
+const otherGroup = new THREE.Group();
+scene.add(otherGroup);
+
+function renderOtherExplorers(others: Array<{ id: number; name: string; level: number }>): void {
+  // 清旧
+  for (const m of otherMarkers) otherGroup.remove(m.sprite);
+  otherMarkers = [];
+  if (others.length === 0) return;
+  others.forEach((o, i) => {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0x7ec8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sprite.scale.setScalar(1.6);
+    const radius = 5.2 + i * 1.1;
+    const angle = (i / others.length) * Math.PI * 2;
+    sprite.position.set(Math.cos(angle) * radius, 1.2, Math.sin(angle) * radius);
+    const label = labelSprite(`${o.name} LV.${o.level}`, '#7ec8ff', 34);
+    label.scale.setScalar(0.01); // 先隐藏，由主循环朝向控制透明度太复杂——直接常显
+    label.position.y = 1.4;
+    sprite.add(label);
+    otherGroup.add(sprite);
+    otherMarkers.push({ sprite, angle, radius, speed: 0.3 + i * 0.05, name: o.name });
+  });
+}
 let ship: THREE.Group | null = null;
 const shipVel = new THREE.Vector3();
 const keys = new Set<string>();
@@ -825,6 +849,7 @@ async function refreshQuestBoard(): Promise<void> {
   try {
     const board = await apiBoard(identity.explorerId);
     me = board.me;
+    renderOtherExplorers(board.others ?? []);
     // 重放离线期间的领取（服务端幂等，重复领取 409 无副作用）
     try {
       const pending = JSON.parse(localStorage.getItem('galaxy-pending-claims') ?? '[]') as string[];
@@ -1082,6 +1107,11 @@ function animate(): void {
   if (selMark) selMark.material.opacity = 0.55 + Math.sin(t * 4) * 0.3;
 
   updateShip(dt);
+  for (const o of otherMarkers) {
+    o.angle += o.speed * dt;
+    o.sprite.position.set(Math.cos(o.angle) * o.radius, 1.2 + Math.sin(t + o.radius) * 0.3, Math.sin(o.angle) * o.radius);
+  }
+
   controls.update();
   if (lowMode) renderer.render(scene, camera);
   else composer.render();

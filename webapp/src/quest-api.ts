@@ -25,6 +25,8 @@ export interface QuestMe {
 export interface BoardResponse {
   quests: QuestDefView[];
   me: QuestMe | null;
+  /** 同场探索者（最近 10 分钟活跃的别人） */
+  others?: Array<{ id: number; name: string; level: number }>;
   leaders?: Array<{ name: string; dust: number; level: number }>;
   bodies?: unknown[];
 }
