@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FIXTURE_DATA, type FixtureBody, type GalaxyData } from './fixture';
 
 /**
@@ -14,6 +17,7 @@ interface PlanetVisual {
   mesh: THREE.Mesh;
   glow: THREE.Sprite;
   speed: number;
+  dir: 1 | -1; // 公转方向：奇偶交替，星系更自然
   angle: number;
   radius: number;
   moons: Array<{ pivot: THREE.Object3D; speed: number }>;
@@ -32,6 +36,31 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x04060d);
 container.appendChild(renderer.domElement);
 
+// Bloom 后处理（移动端降档省 GPU）
+const isMobile = Math.min(innerWidth, innerHeight) < 640;
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(innerWidth, innerHeight),
+  isMobile ? 0.55 : 0.9,  // 强度
+  isMobile ? 0.5 : 0.7,   // 半径
+  0.18                    // 阈值：星体发光、星云透气
+);
+composer.addPass(bloomPass);
+
+// ---------- 自适应画质：弱 GPU（软渲染/低端机）自动降级，保交互流畅 ----------
+let lowMode = false;
+let lowVotes = 0;
+function enterLowMode(): void {
+  lowMode = true;
+  renderer.setPixelRatio(1);
+  renderer.setSize(innerWidth, innerHeight);
+  bloomPass.enabled = false;
+  // 藏掉两层星（第三层保留）
+  starLayers.slice(0, 2).forEach((p) => (p.visible = false));
+  fpsEl.textContent += ' · 省电模式';
+}
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
@@ -41,7 +70,8 @@ controls.maxPolarAngle = Math.PI * 0.85;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.25;
 
-// ---------- 星场 ----------
+// ---------- 星场（带闪烁相位） ----------
+const starMats: Array<{ mat: THREE.PointsMaterial; base: number; phase: number; amp: number }> = [];
 function makeStars(count: number, spread: number, size: number, opacity: number): THREE.Points {
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(count * 3);
@@ -54,10 +84,16 @@ function makeStars(count: number, spread: number, size: number, opacity: number)
     pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
   }
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  return new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xbfd2ff, size, transparent: true, opacity, sizeAttenuation: true }));
+  const mat = new THREE.PointsMaterial({ color: 0xbfd2ff, size, transparent: true, opacity, sizeAttenuation: true });
+  starMats.push({ mat, base: opacity, phase: Math.random() * 6.28, amp: opacity * 0.35 });
+  return new THREE.Points(geo, mat);
 }
-scene.add(makeStars(2200, 320, 0.7, 0.75));
-scene.add(makeStars(900, 240, 1.4, 0.4));
+const starLayers: THREE.Points[] = [
+  makeStars(2200, 320, 0.7, 0.75),
+  makeStars(900, 240, 1.4, 0.4),
+  makeStars(500, 380, 0.5, 0.55),
+];
+for (const l of starLayers) scene.add(l);
 
 // ---------- 星云薄纱 ----------
 function glowTexture(inner: string, outer: string): THREE.Texture {
@@ -89,6 +125,54 @@ for (const [color, x, z, s] of [
 scene.add(new THREE.AmbientLight(0x8090b0, 0.55));
 const sunLight = new THREE.PointLight(0xffd9a0, 320, 240, 1.8);
 scene.add(sunLight);
+
+// ---------- 太阳湍流着色器 ----------
+const SUN_VERT = /* glsl */ `
+varying vec3 vPos;
+void main() {
+  vPos = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const SUN_FRAG = /* glsl */ `
+uniform float uTime;
+varying vec3 vPos;
+float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float noise(vec3 p){
+  vec3 i = floor(p); vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n = mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+                mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+  return n;
+}
+void main() {
+  vec3 p = normalize(vPos) * 3.2;
+  float n = 0.0; float a = 0.5; vec3 q = p;
+  for (int i = 0; i < 4; i++) { n += a * noise(q); q = q * 2.1 + vec3(uTime * 0.12, uTime * 0.07, -uTime * 0.09); a *= 0.55; }
+  n += 0.18 * sin(uTime * 1.3 + p.y * 5.0);
+  vec3 deep = vec3(0.86, 0.35, 0.07);
+  vec3 hot  = vec3(1.0, 0.85, 0.45);
+  vec3 col = mix(deep, hot, smoothstep(0.35, 0.85, n));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+let sunMat: THREE.ShaderMaterial | null = null;
+
+/** 行星菲涅尔大气（背面渲染的呼吸壳） */
+function makeAtmosphere(radius: number, colorHex: number, intensity = 0.55): THREE.Mesh {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 1.22, 28, 28),
+    new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(colorHex) }, uIntensity: { value: intensity } },
+      vertexShader: `varying vec3 vN; varying vec3 vV;
+        void main(){ vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position,1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform vec3 uColor; uniform float uIntensity; varying vec3 vN; varying vec3 vV;
+        void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 2.6); gl_FragColor = vec4(uColor, 1.0) * f * uIntensity; }`,
+      transparent: true,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+}
 
 // ---------- 文字标签 ----------
 function labelSprite(text: string, color = '#c7d6f2', size = 42): THREE.Sprite {
@@ -151,14 +235,16 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
 
   // 恒星
   if (sun) {
-    sunMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(3.4, 40, 40),
-      new THREE.MeshBasicMaterial({ color: 0xffc46b })
-    );
+    sunMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: SUN_VERT,
+      fragmentShader: SUN_FRAG,
+    });
+    sunMesh = new THREE.Mesh(new THREE.SphereGeometry(3.4, 48, 48), sunMat);
     sunMesh.userData = { body: sun };
     scene.add(sunMesh);
     clickables.push(sunMesh);
-    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffb347, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffb347, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
     sunGlow.scale.setScalar(16);
     scene.add(sunGlow);
     const label = labelSprite('博客', '#ffd9a0', 46);
@@ -178,6 +264,8 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     const holder = new THREE.Group();
     const radius = 9.5 + i * 2.35 + (body.kind === 'dark' ? 5.2 : 0); // 暗星拖到外圈
     holder.position.x = radius;
+    // 轴向倾斜：每颗不同的固定倾角，自转更有性格
+    holder.rotation.z = ((i * 47) % 30 - 15) * (Math.PI / 180);
     group.add(holder);
 
     // 轨道线
@@ -208,6 +296,20 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     mesh.userData = { body };
     holder.add(mesh);
     clickables.push(mesh);
+
+    // 不可见的加大命中球（移动端好点）
+    const hit = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(r * 1.9, 1.6), 10, 10),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hit.userData = { body };
+    holder.add(hit);
+    clickables.push(hit);
+
+    // 菲涅尔大气（暗星/挂掉的星球不加）
+    if (alive !== false && body.kind !== 'dark') {
+      holder.add(makeAtmosphere(r, color, 0.5));
+    }
 
     // 光晕：健康绿色调，暗星无，挂掉的暗红
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -261,6 +363,7 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     planets.push({
       body, group, holder, mesh, glow, moons,
       speed: orbitSpeed(repo?.pushedAt ?? null),
+      dir: i % 2 === 0 ? 1 : -1,
       angle: 0,
       radius,
     });
@@ -335,12 +438,21 @@ function showCard(body: FixtureBody) {
 
   card.classList.remove('hidden');
 }
-document.getElementById('card-close')!.addEventListener('click', () => card.classList.add('hidden'));
+// 关闭按钮的监听在「点选」区块统一注册（跟拍也要复位）
 
 // ---------- 点选 ----------
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let downAt = { x: 0, y: 0, t: 0 };
+let followHolder: THREE.Group | THREE.Mesh | null = null; // 跟拍目标（行星 holder 或太阳）
+let selMark: THREE.Sprite | null = null;
+
+function stopFollow(): void {
+  followHolder = null;
+  if (selMark) { selMark.parent?.remove(selMark); selMark = null; }
+  controls.autoRotate = true;
+}
+
 renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: Date.now() }; });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6 || Date.now() - downAt.t > 450) return; // 拖拽不算点击
@@ -351,16 +463,38 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (body) {
     showCard(body);
     controls.autoRotate = false;
+    // 跟拍 + 选中标记
+    stopFollow();
+    const pv = planets.find((p) => p.body.id === body.id);
+    followHolder = pv ? pv.holder : (body.kind === 'sun' ? sunMesh : null);
+    if (pv) {
+      selMark = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTex, color: 0xffffff, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      selMark.scale.setScalar(5.2);
+      pv.holder.add(selMark);
+    }
+  } else {
+    card.classList.add('hidden');
+    stopFollow();
   }
 });
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { card.classList.add('hidden'); stopFollow(); }
+});
+document.getElementById('card-close')!.addEventListener('click', () => { card.classList.add('hidden'); stopFollow(); });
 
 // ---------- 数据 ----------
+let usingFixture = true; // 首帧用兜底渲染；真实数据到达后转 false
+
 async function loadData(): Promise<void> {
   try {
     const res = await fetch('/api/galaxy', { signal: AbortSignal.timeout(9000) });
     if (res.ok) {
       const j = (await res.json()) as GalaxyData;
-      if (j.latest) data = j;
+      if (j.latest) { data = j; usingFixture = false; }
+      if (j.bodies?.length) BODIES = j.bodies; // 目录单一事实源：以 Worker 下发为准
     }
   } catch { /* 保留现有/兜底数据 */ }
   const latest = data.latest;
@@ -368,12 +502,15 @@ async function loadData(): Promise<void> {
   buildScene(BODIES, latest);
   const alive = latest.sites.filter((s) => s.alive).length;
   const total = latest.sites.length;
+  const ageMin = (Date.now() - new Date(latest.ts).getTime()) / 60_000;
+  const stale = ageMin > 35 ? ` · 数据较旧(${Math.round(ageMin)}分前)` : '';
+  const prefix = usingFixture ? '示例数据 · ' : '';
   document.getElementById('hud-meta')!.textContent =
-    `${total} 个天体 · ${alive} 在线 · 更新于 ${new Date(latest.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+    `${prefix}${total} 个天体 · ${alive} 在线 · 更新于 ${new Date(latest.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}${stale}`;
 }
 
-/** 内嵌的正式天体目录（与 Worker src/bodies.ts 同源维护；真实数据优先）。 */
-const BODIES: FixtureBody[] = [
+/** 内嵌兜底目录（真实目录由 /api/galaxy 的 bodies 字段下发，单一事实源在 Worker src/bodies.ts） */
+let BODIES: FixtureBody[] = [
   { id: 'blog', name: '博客 adcakeyuan.top', desc: '一切的原点：Next.js 博客，AI 语义搜索 + RAG 问答 + 自动写作流水线', url: 'https://adcakeyuan.top', repo: 'huqinyuan923-hue/huqinyuan923-hue.github.io', kind: 'sun', hue: 45 },
   { id: 'town', name: 'AI 小镇 茶镇', desc: '12 位 LLM 居民自主生活的像素小镇：记忆、反思、日程与八卦，读博客过日子', url: 'https://town.adcakeyuan.top', repo: 'huqinyuan923-hue/cha-town', kind: 'planet', hue: 20, probe: 'town' },
   { id: 'arcade', name: '街机厅 Arcade Hub', desc: '40 款自研小游戏的在线街机厅，含排行与收藏', url: 'https://arcade.adcakeyuan.top', repo: 'huqinyuan923-hue/arcade-hub', kind: 'planet', hue: 320 },
@@ -394,31 +531,70 @@ const BODIES: FixtureBody[] = [
 
 // ---------- 主循环 ----------
 const clockT = new THREE.Clock();
+const fpsEl = document.createElement('div');
+fpsEl.id = 'fps';
+document.body.appendChild(fpsEl);
+let frames = 0;
+let fpsLast = performance.now();
+
+const ORIGIN = new THREE.Vector3(0, 0, 0);
+const followWp = new THREE.Vector3();
+
 function animate(): void {
   requestAnimationFrame(animate);
   const dt = Math.min(clockT.getDelta(), 0.05);
   const t = clockT.elapsedTime;
 
+  frames++;
+  const now = performance.now();
+  if (now - fpsLast >= 500) {
+    const fps = Math.round((frames * 1000) / (now - fpsLast));
+    fpsEl.textContent = lowMode ? `${fps} fps · 省电模式` : `${fps} fps`;
+    // 连续 4 个采样 < 24fps → 降级（软渲染/低端机的兜底）
+    if (!lowMode) {
+      lowVotes = fps < 24 ? lowVotes + 1 : 0;
+      if (lowVotes >= 4) enterLowMode();
+    }
+    frames = 0;
+    fpsLast = now;
+  }
+
   if (sunMesh) {
     sunMesh.scale.setScalar(1 + Math.sin(t * 1.6) * 0.012);
     sunLight.intensity = 320 + Math.sin(t * 2.3) * 24;
   }
+  if (sunMat) sunMat.uniforms.uTime.value = t;
+
+  for (const s of starMats) {
+    s.mat.opacity = s.base + Math.sin(t * 1.7 + s.phase) * s.amp;
+  }
 
   for (const p of planets) {
-    p.angle += p.speed * dt;
+    p.angle += p.speed * p.dir * dt;
     p.holder.position.set(Math.cos(p.angle) * p.radius, 0, Math.sin(p.angle) * p.radius);
     p.mesh.rotation.y += dt * 0.6;
     for (const m of p.moons) m.pivot.rotation.y += m.speed * dt;
   }
 
+  // 跟拍：相机目标平滑追踪选中天体（关闭卡片即回到恒星并恢复自转）
+  if (followHolder) {
+    followHolder.getWorldPosition(followWp);
+    controls.target.lerp(followWp, 0.07);
+  } else {
+    controls.target.lerp(ORIGIN, 0.02);
+  }
+  if (selMark) selMark.material.opacity = 0.55 + Math.sin(t * 4) * 0.3;
+
   controls.update();
-  renderer.render(scene, camera);
+  if (lowMode) renderer.render(scene, camera);
+  else composer.render();
 }
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 
 buildScene(BODIES, FIXTURE_DATA.latest);

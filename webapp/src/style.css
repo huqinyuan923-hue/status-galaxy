@@ -30,6 +30,17 @@ html, body { height: 100%; overflow: hidden; background: #04060d; }
   color: #e8ecf4;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: card-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(26px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(-50%) translateX(0) scale(1); }
+}
+
+#fps {
+  position: fixed; bottom: 14px; right: 16px; z-index: 10;
+  font: 11px ui-monospace, Consolas, monospace;
+  color: #4d5f7d; pointer-events: none;
 }
 #card.hidden { display: none; }
 #card-close {
@@ -62,6 +73,11 @@ html, body { height: 100%; overflow: hidden; background: #04060d; }
     top: auto; bottom: 0; right: 0; left: 0; transform: none;
     width: auto; border-radius: 18px 18px 0 0;
     padding-bottom: max(20px, env(safe-area-inset-bottom));
+    animation: card-in-m 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  }
+  @keyframes card-in-m {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   #hud h1 { font-size: 18px; }
   #hint { display: none; }

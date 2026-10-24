@@ -45,6 +45,8 @@ export interface Snapshot {
 export interface GalaxyData {
   latest: Snapshot | null;
   history: Array<{ ts: string; sites: SiteTelemetry[]; townTick: number | null }>;
+  /** P3 起由 Worker 下发目录（单一事实源）；旧响应/离线时回退到内嵌目录 */
+  bodies?: FixtureBody[];
 }
 
 export const FIXTURE_BODIES: FixtureBody[] = [

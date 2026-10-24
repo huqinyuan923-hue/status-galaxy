@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import { collectSnapshot, type GalaxySnapshot } from './collector';
+import { BODIES } from './bodies';
 
 /**
  * 星图 API：
@@ -52,7 +53,7 @@ app.get('/galaxy', async (c) => {
     .prepare('SELECT id, ts, payload_json FROM snapshots ORDER BY id DESC LIMIT 25')
     .all<SnapshotRow>();
   const list = rows.results ?? [];
-  if (list.length === 0) return c.json({ latest: null, history: [] });
+  if (list.length === 0) return c.json({ latest: null, history: [], bodies: BODIES });
   const latest = JSON.parse(list[0].payload_json) as GalaxySnapshot;
   // 精简历史：每份只留 ts + 各站点 alive/latency（前端画趋势拖尾）
   const history = list.map((r) => {
@@ -63,7 +64,7 @@ app.get('/galaxy', async (c) => {
       townTick: p.town?.tickCount ?? null,
     };
   });
-  return c.json({ latest, history });
+  return c.json({ latest, history, bodies: BODIES });
 });
 
 app.use('/collect', requireAdmin);
