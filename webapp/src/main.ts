@@ -814,12 +814,36 @@ function updateShip(dt: number): void {
 async function refreshQuestBoard(): Promise<void> {
   const identity = loadIdentity();
   if (!identity) {
-    renderQuestPanel(null, null, [], { onClaimed: () => {}, onSupernova: () => {} }, null, async () => {});
+    // 未注册：表单必须带真实的 onBegin（曾经传过空操作导致注册按钮无效——踩坑）
+    renderQuestPanel(null, null, [], { onClaimed: () => {}, onSupernova: () => {} }, null, async (name) => {
+      const r = await apiBegin(name);
+      saveIdentity({ explorerId: r.explorerId, name: r.name });
+      await refreshQuestBoard();
+    });
     return;
   }
   try {
     const board = await apiBoard(identity.explorerId);
     me = board.me;
+    // 重放离线期间的领取（服务端幂等，重复领取 409 无副作用）
+    try {
+      const pending = JSON.parse(localStorage.getItem('galaxy-pending-claims') ?? '[]') as string[];
+      if (pending.length) {
+        await Promise.allSettled(
+          pending.map((qid) => fetch('/api/quest/claim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ explorerId: identity.explorerId, questId: qid }),
+          }))
+        );
+        localStorage.removeItem('galaxy-pending-claims');
+        // 重放后可能有新的星尘，重拉一次板
+        const fresh = await apiBoard(identity.explorerId);
+        me = fresh.me;
+        board.quests = fresh.quests;
+        board.leaders = fresh.leaders;
+      }
+    } catch { /* 重放失败不影响本次渲染，队列保留 */ }
     renderQuestPanel(
       board.me,
       board.quests,
@@ -848,8 +872,14 @@ async function refreshQuestBoard(): Promise<void> {
       [],
       {
         onClaimed(questId, gained) {
-          dustFloat(`✦ +${gained} 星尘（离线记账）`);
+          dustFloat(`✦ +${gained} 星尘`);
           flashPlanet(questId);
+          // 离线记账：入队，下次联网 board 成功后自动重放（服务端幂等去重）
+          try {
+            const q = JSON.parse(localStorage.getItem('galaxy-pending-claims') ?? '[]') as string[];
+            if (!q.includes(questId)) q.push(questId);
+            localStorage.setItem('galaxy-pending-claims', JSON.stringify(q));
+          } catch { /* localStorage 不可用忽略 */ }
         },
         onSupernova() {},
       },
