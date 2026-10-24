@@ -34,6 +34,11 @@ export interface TownRelationship {
   score: number;
 }
 
+export interface TownConversation {
+  ts: number;
+  lines: Array<{ agentId: number; text: string }>;
+}
+
 export interface TownTelemetry {
   agents: number;
   gameTime: number;
@@ -42,6 +47,7 @@ export interface TownTelemetry {
   dailyTokens: number;
   silent: boolean;
   relationships?: TownRelationship[];
+  recentConversations?: TownConversation[];
 }
 
 export interface Snapshot {
@@ -85,6 +91,8 @@ export const FIXTURE_DATA: GalaxyData = {
     town: { agents: 12, gameTime: 550, clock: '09:10', tickCount: 22, dailyTokens: 16805, silent: false, relationships: [
       { a: 1, b: 9, aName: '阿茶', bName: '小码', score: 4 },
       { a: 2, b: 8, aName: '猫叔', bName: '老湖', score: 3 },
+    ], recentConversations: [
+      { ts: 550, lines: [{ agentId: 1, text: '小码，你的手速真快！' }, { agentId: 5, text: '当年我练了三个月！' }] },
     ] },
   },
   history: [],

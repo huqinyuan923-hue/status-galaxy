@@ -22,6 +22,7 @@ interface PlanetVisual {
   angle: number;
   radius: number;
   moons: Array<{ pivot: THREE.Object3D; speed: number }>;
+  lodTimer?: number;
   /** 轨道拖尾（世界坐标环形缓冲） */
   trail?: THREE.Points;
   trailPos?: Float32Array;
@@ -288,12 +289,17 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
       new THREE.LineBasicMaterial({ color: 0x38507c, transparent: true, opacity: body.kind === 'dark' ? 0.08 : 0.16 })
     ));
 
-    // 行星本体
+    // 行星本体（LOD：三档分段，运行时按相机距离切换 geometry）
     const r = planetRadius(repo?.sizeKb ?? 40);
     const color = hsl(body.hue, body.kind === 'dark' ? 22 : 62, body.kind === 'dark' ? 34 : 56);
     const emissive = alive === false ? 0x5a1414 : new THREE.Color(color).getHex();
+    const lods: Array<[number, THREE.SphereGeometry]> = [
+      [22, new THREE.SphereGeometry(r, 28, 28)],
+      [40, new THREE.SphereGeometry(r, 14, 14)],
+      [1e9, new THREE.SphereGeometry(r, 8, 8)],
+    ];
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 28, 28),
+      lods[0][1],
       new THREE.MeshStandardMaterial({
         color,
         emissive,
@@ -302,7 +308,7 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
         metalness: 0.05,
       })
     );
-    mesh.userData = { body };
+    mesh.userData = { body, lods };
     holder.add(mesh);
     clickables.push(mesh);
 
@@ -484,6 +490,13 @@ function showCard(body: FixtureBody) {
     ${body.probe === 'town' && snap.town?.relationships?.length ? (() => {
       const top = [...snap.town.relationships].sort((x, y) => y.score - x.score)[0];
       return `<dt>最铁关系</dt><dd>${top.aName} × ${top.bName}（${top.score} 次互动）</dd><dt>关系网</dt><dd>${snap.town.relationships.length} 条引力连线</dd>`;
+    })() : ''}
+    ${body.probe === 'town' && snap.town?.recentConversations?.length ? (() => {
+      const conv = snap.town.recentConversations[0];
+      const bubbles = conv.lines
+        .map((l) => `<div class="chat-bubble">${l.text}</div>`)
+        .join('');
+      return `<dt style="grid-column:1/-1;margin-top:6px;">🍵 茶镇广播</dt><div style="grid-column:1/-1;display:flex;flex-direction:column;gap:5px;">${bubbles}</div>`;
     })() : ''}
   `;
 
@@ -709,6 +722,16 @@ function animate(): void {
     p.angle += p.speed * p.dir * dt;
     p.holder.position.set(Math.cos(p.angle) * p.radius, 0, Math.sin(p.angle) * p.radius);
     p.mesh.rotation.y += dt * 0.6;
+
+    // LOD：每 ~0.5s 按相机距离切换一次分段（低帧率设备收益最大）
+    p.lodTimer = (p.lodTimer ?? 0) + dt;
+    if (p.lodTimer > 0.5) {
+      p.lodTimer = 0;
+      const lods = p.mesh.userData.lods as Array<[number, THREE.SphereGeometry]>;
+      const dist = camera.position.distanceTo(p.holder.position);
+      const geo = lods.find(([d]) => dist >= d)?.[1];
+      if (geo && p.mesh.geometry !== geo) p.mesh.geometry = geo;
+    }
     for (const m of p.moons) m.pivot.rotation.y += m.speed * dt;
 
     // 轨道拖尾：环形缓冲左移一格，写入当前世界坐标

@@ -28,6 +28,11 @@ export interface TownRelationship {
   score: number;
 }
 
+export interface TownConversation {
+  ts: number;
+  lines: Array<{ agentId: number; text: string }>;
+}
+
 export interface TownTelemetry {
   agents: number;
   gameTime: number;
@@ -37,6 +42,8 @@ export interface TownTelemetry {
   silent: boolean;
   /** 居民关系图谱（R12：星图引力连线数据源），agent id 从 1 连续编号 */
   relationships?: TownRelationship[];
+  /** 最近 3 场居民对话（R14：信息卡「茶镇广播」） */
+  recentConversations?: TownConversation[];
 }
 
 export interface GalaxySnapshot {
@@ -134,6 +141,7 @@ export async function probeTown(fetchFn: FetchLike = fetch): Promise<TownTelemet
       spend?: { dailyTokens: number; silent: boolean };
       agents?: unknown[];
       relationships?: TownRelationship[];
+      recentConversations?: TownConversation[];
     };
     if (!j.world) return null;
     return {
@@ -147,6 +155,9 @@ export async function probeTown(fetchFn: FetchLike = fetch): Promise<TownTelemet
         ? j.relationships
             .filter((r) => r && Number.isFinite(r.a) && Number.isFinite(r.b))
             .slice(0, 40)
+        : [],
+      recentConversations: Array.isArray(j.recentConversations)
+        ? j.recentConversations.slice(0, 3)
         : [],
     };
   } catch {
