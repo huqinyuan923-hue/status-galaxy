@@ -525,7 +525,9 @@ function showCard(body: FixtureBody) {
 // 关闭按钮的监听在「点选」区块统一注册（跟拍也要复位）
 
 // ---------- 点选 ----------
+const tooltip = document.getElementById('tooltip')!;
 const raycaster = new THREE.Raycaster();
+raycaster.params.Line = { threshold: 0.35 }; // 引力连线拾取容差
 const pointer = new THREE.Vector2();
 let downAt = { x: 0, y: 0, t: 0 };
 let followHolder: THREE.Group | THREE.Mesh | null = null; // 跟拍目标（行星 holder 或太阳）
@@ -542,6 +544,29 @@ function stopFollow(): void {
 }
 
 renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+
+/** 悬停引力连线 → 浮现居民对话备注（R12b） */
+renderer.domElement.addEventListener('pointermove', (e) => {
+  // 只在小镇被选中（卡片开着）时才检测连线，省射线
+  if (card.classList.contains('hidden') || !selectedId) { tooltip.classList.add('hidden'); return; }
+  const townPv = planets.find((p) => p.body.probe === 'town');
+  const relLines = townPv?.moonLines?.userData.relLines as THREE.LineSegments | undefined;
+  if (!relLines || !relLines.visible) { tooltip.classList.add('hidden'); return; }
+
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(relLines, false);
+  const rels = relLines.userData.rels as Array<{ a: number; b: number; aName: string; bName: string; score: number; note: string }>;
+  const idx = hits.length ? (hits[0].index as number) : -1;
+  const rel = idx >= 0 ? rels[idx] : undefined;
+  if (!rel) { tooltip.classList.add('hidden'); return; }
+  tooltip.innerHTML = `<div class="tt-who">${rel.aName} × ${rel.bName} · ${rel.score} 次互动</div>${rel.note ?? ''}`;
+  tooltip.classList.remove('hidden');
+  tooltip.style.left = `${Math.min(e.clientX + 16, innerWidth - 300)}px`;
+  tooltip.style.top = `${Math.min(e.clientY + 14, innerHeight - 80)}px`;
+});
+renderer.domElement.addEventListener('pointerleave', () => tooltip.classList.add('hidden'));
+
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6 || Date.now() - downAt.t > 450) return; // 拖拽不算点击
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
