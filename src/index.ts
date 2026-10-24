@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import { collectSnapshot, type GalaxySnapshot } from './collector';
 import { BODIES } from './bodies';
+import { questRoute } from './quest/routes';
 
 /**
  * 星图 API：
@@ -47,6 +48,8 @@ interface SnapshotRow {
 }
 
 app.get('/health', (c) => c.json({ ok: true }));
+
+app.route('/quest', questRoute);
 
 app.get('/galaxy', async (c) => {
   const rows = await c.env.DB

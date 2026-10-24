@@ -4,6 +4,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FIXTURE_DATA, type FixtureBody, type GalaxyData } from './fixture';
+import { initQuestPanel, renderQuestPanel, toggleQuestPanel, isQuestPanelOpen } from './quest-ui';
+import { apiBoard, apiBegin, loadIdentity, saveIdentity, type ExplorerIdentity, type BoardResponse } from './quest-api';
 
 /**
  * ADCakeyuan 星图：博客=恒星，项目=行星。
@@ -662,6 +664,226 @@ let BODIES: FixtureBody[] = [
   { id: 'timemark', name: '时光账本 TimeMark', desc: '时间记录应用（部署中，暗星）', url: null, repo: 'huqinyuan923-hue/timemark-vercel', kind: 'dark', hue: 350 },
 ];
 
+// ---------- Galaxy Quest：飞船 + 任务系统 ----------
+initQuestPanel({
+  onClaimed(questId, gained) {
+    if (me) me.dust += gained;
+    dustFloat(`✦ +${gained} 星尘`);
+    flashPlanet(questId);
+    void refreshQuestBoard();
+  },
+  onSupernova() { supernova(); },
+  onOpen() { void refreshQuestBoard(); },
+});
+void refreshQuestBoard();
+let me: BoardResponse['me'] = null;
+let ship: THREE.Group | null = null;
+const shipVel = new THREE.Vector3();
+const keys = new Set<string>();
+let shipTrail: THREE.Points | null = null;
+let shipTrailPos: Float32Array | null = null;
+let shipTrailIdx = 0;
+const SUPERNOVA_DONE = 'galaxy-supernova-seen';
+
+function buildShip(): void {
+  if (ship) return;
+  ship = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 1.6, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffd98a })
+  );
+  body.rotation.x = Math.PI / 2; // 锥尖朝 +Z
+  ship.add(body);
+  const flame = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: haloTex, color: 0x8ab4ff, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  flame.scale.setScalar(1.6);
+  flame.position.z = -1;
+  ship.add(flame);
+  ship.position.set(6, 0, 6);
+  scene.add(ship);
+
+  // 飞船光尾
+  const N = 60;
+  shipTrailPos = new Float32Array(N * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(shipTrailPos, 3));
+  shipTrail = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0x8ab4ff, transparent: true, opacity: 0.5, size: 0.14,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  scene.add(shipTrail);
+}
+
+addEventListener('keydown', (e) => {
+  keys.add(e.key.toLowerCase());
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
+    controls.autoRotate = false;
+  }
+});
+addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+// 点击空地 → 飞船飞向该点（与点选星球共存：命中星球时不移动）
+const flyTarget = new THREE.Vector3();
+let hasFlyTarget = false;
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6 || Date.now() - downAt.t > 450) return;
+  if (!ship) return;
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(clickables, false)[0];
+  const body = hit?.object.userData?.body as FixtureBody | undefined;
+  if (body) {
+    showCard(body);
+    controls.autoRotate = false;
+    selectedId = body.id;
+    stopFollow();
+    const pv = planets.find((p) => p.body.id === body.id);
+    followHolder = pv ? pv.holder : (body.kind === 'sun' ? sunMesh : null);
+    if (pv) {
+      selMark = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTex, color: 0xffffff, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      selMark.scale.setScalar(5.2);
+      pv.holder.add(selMark);
+      const pr = (pv.mesh.geometry as THREE.SphereGeometry).parameters.radius;
+      followDist = Math.max(7, Math.min(22, pr * 8));
+    } else {
+      followDist = 0;
+    }
+    return;
+  }
+  // 空点：关闭卡片 + 飞船前往射线与黄道面交点
+  card.classList.add('hidden');
+  stopFollow();
+  if (raycaster.ray.intersectPlane(groundPlane, flyTarget)) {
+    flyTarget.y = 0.8;
+    hasFlyTarget = true;
+  }
+});
+
+function updateShip(dt: number): void {
+  if (!ship || !shipTrail || !shipTrailPos) return;
+  const speed = 22 * dt;
+  const fwd = new THREE.Vector3();
+  camera.getWorldDirection(fwd);
+  fwd.y = 0; fwd.normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+  if (keys.has('w') || keys.has('arrowup')) ship.position.addScaledVector(fwd, speed);
+  if (keys.has('s') || keys.has('arrowdown')) ship.position.addScaledVector(fwd, -speed);
+  if (keys.has('a') || keys.has('arrowleft')) ship.position.addScaledVector(right, -speed);
+  if (keys.has('d') || keys.has('arrowright')) ship.position.addScaledVector(right, speed);
+  if (hasFlyTarget) {
+    const to = flyTarget.clone().sub(ship.position);
+    const d = to.length();
+    if (d < 1) hasFlyTarget = false;
+    else ship.position.addScaledVector(to.normalize(), Math.min(speed * 1.4, d));
+  }
+  ship.position.x = Math.max(-90, Math.min(90, ship.position.x));
+  ship.position.z = Math.max(-90, Math.min(90, ship.position.z));
+
+  // 朝向：朝移动方向
+  const vel = shipVel;
+  const prev = ship.position.clone();
+  if (ship.position.distanceToSquared(prev) > 0) {
+    // 位置更新已在上方完成，用键位向量近似朝向
+    const move = new THREE.Vector3();
+    if (keys.has('w') || keys.has('arrowup')) move.add(fwd);
+    if (keys.has('s') || keys.has('arrowdown')) move.sub(fwd);
+    if (keys.has('a') || keys.has('arrowleft')) move.sub(right);
+    if (keys.has('d') || keys.has('arrowright')) move.add(right);
+    if (move.lengthSq() > 0) ship.lookAt(ship.position.clone().add(move));
+    else if (hasFlyTarget) ship.lookAt(flyTarget);
+  }
+  void vel;
+
+  // 光尾环形缓冲
+  shipTrailIdx = (shipTrailIdx + 1) % (shipTrailPos.length / 3);
+  shipTrailPos[shipTrailIdx * 3] = ship.position.x;
+  shipTrailPos[shipTrailIdx * 3 + 1] = ship.position.y;
+  shipTrailPos[shipTrailIdx * 3 + 2] = ship.position.z;
+  (shipTrail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+}
+
+// ---------- 任务面板逻辑 ----------
+async function refreshQuestBoard(): Promise<void> {
+  const identity = loadIdentity();
+  if (!identity) {
+    renderQuestPanel(null, null, [], { onClaimed: () => {}, onSupernova: () => {} }, null, async () => {});
+    return;
+  }
+  try {
+    const board = await apiBoard(identity.explorerId);
+    me = board.me;
+    renderQuestPanel(
+      board.me,
+      board.quests,
+      board.leaders ?? [],
+      {
+        onClaimed(questId, gained) {
+          if (me) me.dust += gained;
+          dustFloat(`✦ +${gained} 星尘`);
+          flashPlanet(questId);
+          void refreshQuestBoard();
+        },
+        onSupernova() { supernova(); },
+      },
+      identity.explorerId,
+      async (name) => {
+        const r = await apiBegin(name);
+        saveIdentity({ explorerId: r.explorerId, name: r.name });
+        await refreshQuestBoard();
+      }
+    );
+  } catch { /* 静默：面板可稍后刷新 */ }
+}
+
+function dustFloat(text: string): void {
+  const el = document.getElementById('dust-float')!;
+  el.textContent = text;
+  el.classList.remove('show');
+  void el.offsetWidth; // 重启动画
+  el.classList.add('show');
+}
+
+function flashPlanet(questId: string): void {
+  const map: Record<string, string> = {
+    'blog-visit': 'blog', 'toolbox-use': 'toolbox', 'arcade-play': 'arcade',
+    'town-chat': 'town', 'secret-mayor': 'town', 'pomo-focus': 'pomo',
+    'guide-read': 'guide', 'cet4-quiz': 'cet4', 'treasury-log': 'treasury',
+    'rss-sub': 'rss', 'filekit-magic': 'filekit', 'deeplearn-learn': 'deeplearn',
+    'wrapped-gen': 'wrapped',
+  };
+  const bodyId = map[questId];
+  const pv = planets.find((p) => p.body.id === bodyId);
+  if (!pv) return;
+  const orig = pv.glow.material.opacity;
+  pv.glow.material.opacity = 1;
+  pv.glow.scale.multiplyScalar(1.6);
+  setTimeout(() => {
+    pv.glow.material.opacity = orig;
+    pv.glow.scale.divideScalar(1.6);
+  }, 1200);
+}
+
+function supernova(): void {
+  if (localStorage.getItem(SUPERNOVA_DONE)) return;
+  localStorage.setItem(SUPERNOVA_DONE, '1');
+  const flash = document.createElement('div');
+  flash.style.cssText = 'position:fixed;inset:0;z-index:60;background:radial-gradient(circle at 50% 50%, #fff8e0, #ffd98a 30%, transparent 70%);opacity:0;pointer-events:none;transition:opacity 0.4s;';
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => (flash.style.opacity = '1'));
+  setTimeout(() => {
+    flash.style.opacity = '0';
+    setTimeout(() => flash.remove(), 500);
+  }, 900);
+  dustFloat('★ 超新星达成 —— 星系开拓者');
+}
+
 // ---------- 主循环 ----------
 const clockT = new THREE.Clock();
 const fpsEl = document.createElement('div');
@@ -807,6 +1029,7 @@ function animate(): void {
   }
   if (selMark) selMark.material.opacity = 0.55 + Math.sin(t * 4) * 0.3;
 
+  updateShip(dt);
   controls.update();
   if (lowMode) renderer.render(scene, camera);
   else composer.render();
