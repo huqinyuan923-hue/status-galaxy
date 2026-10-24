@@ -70,14 +70,20 @@ export function renderQuestPanel(
       </div>`;
     listEl.innerHTML = '';
     leadersEl.innerHTML = leaders.map((l, i) => `<li><span>${i + 1}. ${esc(l.name)}</span><span>${l.dust} ✦</span></li>`).join('');
-    root.querySelector('#q-begin-btn')!.addEventListener('click', async () => {
+    root.querySelector('#q-begin-btn')!.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
       const input = root.querySelector('#q-name') as HTMLInputElement;
       const err = root.querySelector('#q-begin-err') as HTMLElement;
       err.textContent = '';
+      btn.disabled = true;
+      btn.textContent = '启程中…';
       try {
         await onBegin(input.value);
       } catch (e) {
-        err.textContent = (e as Error).message;
+        err.textContent = (e as Error).message + '（网络不稳时可重试，代号不会丢）';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '启程';
       }
     });
     return;

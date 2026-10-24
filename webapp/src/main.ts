@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { FIXTURE_DATA, type FixtureBody, type GalaxyData } from './fixture';
 import { initQuestPanel, renderQuestPanel, toggleQuestPanel, isQuestPanelOpen } from './quest-ui';
 import { apiBoard, apiBegin, loadIdentity, saveIdentity, type ExplorerIdentity, type BoardResponse } from './quest-api';
+import { QUEST_CATALOG } from './quest-catalog';
 
 /**
  * ADCakeyuan 星图：博客=恒星，项目=行星。
@@ -839,7 +840,28 @@ async function refreshQuestBoard(): Promise<void> {
         await refreshQuestBoard();
       }
     );
-  } catch { /* 静默：面板可稍后刷新 */ }
+  } catch (err) {
+    // 失败可见 + 兜底渲染：内嵌任务目录（done 未知→按未完成显示）+ 重试按钮，不让玩家卡死
+    renderQuestPanel(
+      { id: identity.explorerId, name: identity.name, dust: 0, level: 1, levelCur: 0, levelNext: 100, supernova: false, doneCount: 0 },
+      QUEST_CATALOG.map((q) => ({ ...q, hidden: q.hidden ?? false, done: false, doneAt: null })),
+      [],
+      {
+        onClaimed(questId, gained) {
+          dustFloat(`✦ +${gained} 星尘（离线记账）`);
+          flashPlanet(questId);
+        },
+        onSupernova() {},
+      },
+      identity.explorerId,
+      async () => {}
+    );
+    const errEl = document.getElementById('quest-me') as HTMLElement;
+    errEl.insertAdjacentHTML('beforeend',
+      `<div class="q-err">网络不稳，任务进度暂时读不到。已完成的部分照常可领，稍后自动重试。</div>
+       <button class="q-go" id="q-retry">重试</button>`);
+    errEl.querySelector('#q-retry')!.addEventListener('click', () => void refreshQuestBoard());
+  }
 }
 
 function dustFloat(text: string): void {
