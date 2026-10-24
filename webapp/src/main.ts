@@ -123,6 +123,48 @@ function glowTexture(inner: string, outer: string): THREE.Texture {
   return new THREE.CanvasTexture(c);
 }
 const haloTex = glowTexture('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)');
+
+// ---------- 真实行星贴图（Solar System Scope，CC BY 4.0；本地托管零外链） ----------
+const TEX = {
+  earth: '/textures/2k_earth_daymap.jpg',
+  clouds: '/textures/2k_earth_clouds.jpg',
+  jupiter: '/textures/2k_jupiter.jpg',
+  mars: '/textures/2k_mars.jpg',
+  mercury: '/textures/2k_mercury.jpg',
+  moon: '/textures/2k_moon.jpg',
+  neptune: '/textures/2k_neptune.jpg',
+  saturn: '/textures/2k_saturn.jpg',
+  uranus: '/textures/2k_uranus.jpg',
+} as const;
+
+/** 天体 → 贴图（theme 赋值；tint 可对同贴图做色相偏移） */
+const BODY_TEX: Record<string, { tex: string; tint?: number }> = {
+  town: { tex: TEX.earth },
+  arcade: { tex: TEX.jupiter },
+  cha: { tex: TEX.mars },
+  deeplearn: { tex: TEX.uranus },
+  guide: { tex: TEX.mercury },
+  toolbox: { tex: TEX.moon },
+  rss: { tex: TEX.neptune },
+  wrapped: { tex: TEX.saturn },
+  salary: { tex: TEX.moon, tint: 0xffd9a0 },
+  pomo: { tex: TEX.mars, tint: 0xffb080 },
+  filekit: { tex: TEX.uranus, tint: 0xa8ffd9 },
+  cet4: { tex: TEX.neptune, tint: 0x9fc0ff },
+  treasury: { tex: TEX.moon, tint: 0xa8ffc8 },
+  imgbed: { tex: TEX.moon },
+  timemark: { tex: TEX.mercury },
+};
+
+const texLoader = new THREE.TextureLoader();
+const texCache = new Map<string, THREE.Texture>();
+function loadTex(url: string): THREE.Texture | null {
+  if (texCache.has(url)) return texCache.get(url)!;
+  const t = texLoader.load(url);
+  t.colorSpace = THREE.SRGBColorSpace;
+  texCache.set(url, t);
+  return t; // 异步加载：首帧可能为空贴图，加载完自动生效
+}
 for (const [color, x, z, s] of [
   ['#1b3a6b', -110, -70, 260],
   ['#3a1b5e', 120, 40, 220],
@@ -297,28 +339,49 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
       new THREE.LineBasicMaterial({ color: 0x38507c, transparent: true, opacity: body.kind === 'dark' ? 0.08 : 0.16 })
     ));
 
-    // 行星本体（LOD：三档分段，运行时按相机距离切换 geometry）
+    // 行星本体（LOD：三档分段；材质带真实贴图，运行时按相机距离切换 geometry）
     const r = planetRadius(repo?.sizeKb ?? 40);
     const color = hsl(body.hue, body.kind === 'dark' ? 22 : 62, body.kind === 'dark' ? 34 : 56);
     const emissive = alive === false ? 0x5a1414 : new THREE.Color(color).getHex();
     const lods: Array<[number, THREE.SphereGeometry]> = [
-      [22, new THREE.SphereGeometry(r, 28, 28)],
-      [40, new THREE.SphereGeometry(r, 14, 14)],
+      [22, new THREE.SphereGeometry(r, 32, 32)],
+      [40, new THREE.SphereGeometry(r, 16, 16)],
       [1e9, new THREE.SphereGeometry(r, 8, 8)],
     ];
+    const bodyTexCfg = BODY_TEX[body.id];
+    const tex = bodyTexCfg ? loadTex(bodyTexCfg.tex) : null;
+    const tint = bodyTexCfg?.tint ?? null;
     const mesh = new THREE.Mesh(
       lods[0][1],
       new THREE.MeshStandardMaterial({
-        color,
+        ...(tex ? { map: tex } : { color }),
+        ...(tint ? { color: tint } : {}),
         emissive,
-        emissiveIntensity: alive === false ? 0.25 : body.kind === 'dark' ? 0.18 : 0.65,
-        roughness: 0.75,
-        metalness: 0.05,
+        emissiveIntensity: alive === false ? 0.25 : body.kind === 'dark' ? 0.15 : 0.22,
+        roughness: 0.85,
+        metalness: 0.02,
+        ...(body.kind === 'dark' ? { transparent: true, opacity: 0.55 } : {}),
       })
     );
     mesh.userData = { body, lods };
     holder.add(mesh);
     clickables.push(mesh);
+
+    // 小镇行星：云层壳（比本体略大，独立慢转）
+    if (body.probe === 'town') {
+      const cloudTex = loadTex(TEX.clouds);
+      const clouds = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 1.03, 32, 32),
+        new THREE.MeshStandardMaterial({
+          ...(cloudTex ? { map: cloudTex, transparent: true, opacity: 0.55, alphaMap: cloudTex } : { transparent: true, opacity: 0.2 }),
+          depthWrite: false,
+          roughness: 1,
+        })
+      );
+      clouds.userData.isClouds = true;
+      holder.add(clouds);
+      holder.userData.clouds = clouds;
+    }
 
     // 不可见的加大命中球（移动端好点）
     const hit = new THREE.Mesh(
@@ -375,8 +438,8 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
         pivot.rotation.x = ((m % 3) - 1) * 0.28;
         const moonR = r + 1.5 + (m % 2) * 0.7;
         const moon = new THREE.Mesh(
-          new THREE.SphereGeometry(0.22, 10, 10),
-          new THREE.MeshBasicMaterial({ color: m % 4 === 0 ? 0xffb08a : 0xa8c6ff })
+          new THREE.SphereGeometry(0.22, 12, 12),
+          new THREE.MeshStandardMaterial({ map: loadTex(TEX.moon), roughness: 0.95 })
         );
         moon.position.x = moonR;
         pivot.add(moon);
@@ -1039,6 +1102,8 @@ function animate(): void {
     p.angle += p.speed * p.dir * dt;
     p.holder.position.set(Math.cos(p.angle) * p.radius, 0, Math.sin(p.angle) * p.radius);
     p.mesh.rotation.y += dt * 0.6;
+    const clouds = p.holder.userData.clouds as THREE.Mesh | undefined;
+    if (clouds) clouds.rotation.y += dt * 0.22; // 云层独立慢转
 
     // LOD：每 ~0.5s 按相机距离切换一次分段（低帧率设备收益最大）
     p.lodTimer = (p.lodTimer ?? 0) + dt;

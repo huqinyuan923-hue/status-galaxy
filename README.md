@@ -29,3 +29,7 @@ curl -X POST localhost:8787/api/collect -H "Authorization: Bearer $ADMIN_TOKEN"
 ## 测试
 
 `npm test`：SSRF 守卫、采集快照（含失败容错）、目录完整性。
+
+## 🪐 行星贴图版权
+
+行星表面贴图来自 [Solar System Scope](https://www.solarsystemscope.com/textures/)（CC BY 4.0），已做本地托管（`webapp/public/textures/`），运行时零外链。
