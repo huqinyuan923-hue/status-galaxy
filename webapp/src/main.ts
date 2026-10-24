@@ -387,7 +387,8 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     const trailGeo = new THREE.BufferGeometry();
     trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
     const trail = new THREE.Points(trailGeo, new THREE.PointsMaterial({
-      color, transparent: true, opacity: 0.3, size: 0.16,
+      color: alive === false ? 0xff4455 : color, // 掉线星球拖尾红警
+      transparent: true, opacity: 0.3, size: 0.16,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     trail.visible = !lowMode;
@@ -494,10 +495,12 @@ let downAt = { x: 0, y: 0, t: 0 };
 let followHolder: THREE.Group | THREE.Mesh | null = null; // 跟拍目标（行星 holder 或太阳）
 let selMark: THREE.Sprite | null = null;
 let selectedId: string | null = null;
+let followDist = 0; // >0 时把相机与目标的距离缓动到该值（选中行星自适应取景）
 
 function stopFollow(): void {
   followHolder = null;
   selectedId = null;
+  followDist = 0;
   if (selMark) { selMark.parent?.remove(selMark); selMark = null; }
   controls.autoRotate = true;
 }
@@ -524,6 +527,11 @@ renderer.domElement.addEventListener('pointerup', (e) => {
       }));
       selMark.scale.setScalar(5.2);
       pv.holder.add(selMark);
+      // 相机距离自适应：小行星贴近些（按半径 6-9 倍取景）
+      const pr = (pv.mesh.geometry as THREE.SphereGeometry).parameters.radius;
+      followDist = Math.max(7, Math.min(22, pr * 8));
+    } else {
+      followDist = 0; // 太阳：不调整
     }
   } else {
     card.classList.add('hidden');
@@ -670,6 +678,13 @@ function animate(): void {
   if (followHolder) {
     followHolder.getWorldPosition(followWp);
     controls.target.lerp(followWp, 0.07);
+    if (followDist > 0) {
+      // 相机沿当前视线收敛到理想距离（取景自适应）
+      const dir = camera.position.clone().sub(controls.target);
+      const d = dir.length();
+      const nd = d + (followDist - d) * 0.05;
+      camera.position.copy(controls.target).add(dir.setLength(nd));
+    }
   } else {
     controls.target.lerp(ORIGIN, 0.02);
   }
