@@ -52,9 +52,9 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(innerWidth, innerHeight),
-  isMobile ? 0.55 : 0.9,  // 强度
-  isMobile ? 0.5 : 0.7,   // 半径
-  0.18                    // 阈值：星体发光、星云透气
+  isMobile ? 0.35 : 0.55,  // 强度（R25 调低：只让太阳泛光，行星不吃 bloom）
+  isMobile ? 0.4 : 0.55,   // 半径
+  0.55                     // 阈值抬高：行星不再糊成光团
 );
 composer.addPass(bloomPass);
 
@@ -304,8 +304,8 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     sunMesh.userData = { body: sun };
     scene.add(sunMesh);
     clickables.push(sunMesh);
-    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffb347, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
-    sunGlow.scale.setScalar(16);
+    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffb347, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sunGlow.scale.setScalar(9);
     scene.add(sunGlow);
     const label = labelSprite('博客', '#ffd9a0', 46);
     label.position.set(0, 5.6, 0);
@@ -351,13 +351,17 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     const bodyTexCfg = BODY_TEX[body.id];
     const tex = bodyTexCfg ? loadTex(bodyTexCfg.tex) : null;
     const tint = bodyTexCfg?.tint ?? null;
+    if (tex) {
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 斜视角清晰
+    }
     const mesh = new THREE.Mesh(
       lods[0][1],
       new THREE.MeshStandardMaterial({
         ...(tex ? { map: tex } : { color }),
         ...(tint ? { color: tint } : {}),
+        // 自发光降到 0.08：贴图自己说话，不再被色光冲淡（R25 修复「看着糊」）
         emissive,
-        emissiveIntensity: alive === false ? 0.25 : body.kind === 'dark' ? 0.15 : 0.22,
+        emissiveIntensity: alive === false ? 0.22 : body.kind === 'dark' ? 0.12 : 0.08,
         roughness: 0.85,
         metalness: 0.02,
         ...(body.kind === 'dark' ? { transparent: true, opacity: 0.55 } : {}),
@@ -398,16 +402,16 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     }
 
     // 光晕：健康绿色调，暗星无，挂掉的暗红
+    // 光晕：克制的薄边（R25 修复——之前的大光团把贴图模型全吞了）
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: haloTex,
       color: alive === false ? 0xff5252 : body.kind === 'dark' ? 0x556070 : new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.45).getHex(),
       transparent: true,
-      opacity: body.kind === 'dark' ? 0.1 : 0.5,
+      opacity: body.kind === 'dark' ? 0.06 : alive === false ? 0.2 : 0.16,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }));
-    const lat = site?.latencyMs ?? 200;
-    glow.scale.setScalar(r * (4.2 + Math.max(0, (400 - Math.min(lat, 400)) / 160)));
+    glow.scale.setScalar(r * 1.7);
     holder.add(glow);
 
     // 环 = 有独立域名
@@ -1091,7 +1095,10 @@ function animate(): void {
     sunLight.intensity = 320 + Math.sin(t * 2.3) * (24 + townActivity * 90);
   }
   if (sunMat) sunMat.uniforms.uTime.value = t;
-  if (sunGlow) sunGlow.scale.setScalar(16 * (1 + townActivity * 0.4));
+  if (sunGlow) {
+    sunGlow.scale.setScalar(9 * (1 + townActivity * 0.35));
+    sunGlow.material.opacity = 0.5 + Math.sin(t * 1.1) * 0.08;
+  }
   setLabelDim(selectedId ?? undefined);
 
   for (const s of starMats) {
