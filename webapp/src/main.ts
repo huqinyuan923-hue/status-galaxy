@@ -16,11 +16,17 @@ interface PlanetVisual {
   holder: THREE.Group;     // 行星本体（含环/卫星/标签），挂在 group 上做公转
   mesh: THREE.Mesh;
   glow: THREE.Sprite;
+  label: THREE.Sprite;
   speed: number;
   dir: 1 | -1; // 公转方向：奇偶交替，星系更自然
   angle: number;
   radius: number;
   moons: Array<{ pivot: THREE.Object3D; speed: number }>;
+  /** 轨道拖尾（世界坐标环形缓冲） */
+  trail?: THREE.Points;
+  trailPos?: Float32Array;
+  /** 小镇卫星连线 */
+  moonLines?: THREE.LineSegments;
 }
 
 const container = document.getElementById('app')!;
@@ -56,8 +62,8 @@ function enterLowMode(): void {
   renderer.setPixelRatio(1);
   renderer.setSize(innerWidth, innerHeight);
   bloomPass.enabled = false;
-  // 藏掉两层星（第三层保留）
   starLayers.slice(0, 2).forEach((p) => (p.visible = false));
+  for (const p of planets) if (p.trail) p.trail.visible = false; // 拖尾也关
   fpsEl.textContent += ' · 省电模式';
 }
 
@@ -216,7 +222,10 @@ function orbitSpeed(pushedAt: string | null): number {
 function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
   const snap: NonNullable<GalaxyData['latest']> = snapIn ?? (FIXTURE_DATA.latest as NonNullable<GalaxyData['latest']>);
   // 清场
-  for (const p of planets) scene.remove(p.group);
+  for (const p of planets) {
+    scene.remove(p.group);
+    if (p.trail) scene.remove(p.trail);
+  }
   planets.length = 0;
   clickables.length = 0;
   if (sunMesh) { scene.remove(sunMesh); sunMesh = null; }
@@ -342,8 +351,10 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
 
     // 小镇居民卫星
     const moons: PlanetVisual['moons'] = [];
+    let moonLines: THREE.LineSegments | undefined;
     if (body.probe === 'town' && snap?.town) {
       const n = Math.max(3, snap.town.agents);
+      const moonMeshes: THREE.Mesh[] = [];
       for (let m = 0; m < n; m++) {
         const pivot = new THREE.Object3D();
         pivot.rotation.y = (m / n) * Math.PI * 2;
@@ -357,11 +368,35 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
         pivot.add(moon);
         holder.add(pivot);
         moons.push({ pivot, speed: 0.6 + (m % 3) * 0.25 });
+        moonMeshes.push(moon);
       }
+      // 卫星连线（每帧更新端点）
+      const linePos = new Float32Array(n * 2 * 3);
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
+      moonLines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({
+        color: 0x9fb8e8, transparent: true, opacity: 0.22,
+      }));
+      moonLines.userData = { moonMeshes };
+      holder.add(moonLines);
     }
 
+    // 轨道拖尾：世界坐标环形缓冲（省电模式下隐藏）
+    const TRAIL_N = 80;
+    const trailPos = new Float32Array(TRAIL_N * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+    const trail = new THREE.Points(trailGeo, new THREE.PointsMaterial({
+      color, transparent: true, opacity: 0.3, size: 0.16,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    trail.visible = !lowMode;
+    scene.add(trail);
+
     planets.push({
-      body, group, holder, mesh, glow, moons,
+      body, group, holder, mesh, glow, label, moons,
+      trail, trailPos,
+      ...(moonLines ? { moonLines } : {}),
       speed: orbitSpeed(repo?.pushedAt ?? null),
       dir: i % 2 === 0 ? 1 : -1,
       angle: 0,
@@ -394,8 +429,20 @@ function showCard(body: FixtureBody) {
     site?.alive ? `<dd class="ok">在线 ${site.status} · ${site.latencyMs}ms</dd>` :
     '<dd class="bad">离线 / 超时</dd>';
 
+  // 历史在线率（近 N 次采集）
+  let uptimeLine = '';
+  if (body.kind !== 'dark') {
+    const hist = data.history.filter((h) => h.sites.some((s) => s.id === body.id));
+    if (hist.length >= 2) {
+      const up = hist.filter((h) => h.sites.find((s) => s.id === body.id)?.alive).length;
+      const pct = Math.round((up / hist.length) * 100);
+      uptimeLine = `<dt>近${hist.length}次在线</dt><dd class="${pct >= 90 ? 'ok' : pct >= 50 ? 'dim' : 'bad'}">${pct}%</dd>`;
+    }
+  }
+
   document.getElementById('card-stats')!.innerHTML = `
     <dt>状态</dt>${statusLine}
+    ${uptimeLine}
     <dt>技术</dt><dd>${repo?.language ?? '—'}</dd>
     <dt>代码量</dt><dd>${repo ? (repo.sizeKb > 1024 ? (repo.sizeKb / 1024).toFixed(1) + ' MB' : repo.sizeKb + ' KB') : '私有仓库'}</dd>
     <dt>Star</dt><dd>${repo?.stars ?? '—'}</dd>
@@ -446,9 +493,11 @@ const pointer = new THREE.Vector2();
 let downAt = { x: 0, y: 0, t: 0 };
 let followHolder: THREE.Group | THREE.Mesh | null = null; // 跟拍目标（行星 holder 或太阳）
 let selMark: THREE.Sprite | null = null;
+let selectedId: string | null = null;
 
 function stopFollow(): void {
   followHolder = null;
+  selectedId = null;
   if (selMark) { selMark.parent?.remove(selMark); selMark = null; }
   controls.autoRotate = true;
 }
@@ -463,6 +512,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (body) {
     showCard(body);
     controls.autoRotate = false;
+    selectedId = body.id;
     // 跟拍 + 选中标记
     stopFollow();
     const pv = planets.find((p) => p.body.id === body.id);
@@ -500,6 +550,7 @@ async function loadData(): Promise<void> {
   const latest = data.latest;
   if (!latest) return;
   buildScene(BODIES, latest);
+  townActivity = latest.town ? Math.min(1, latest.town.dailyTokens / 500_000) : 0;
   const alive = latest.sites.filter((s) => s.alive).length;
   const total = latest.sites.length;
   const ageMin = (Date.now() - new Date(latest.ts).getTime()) / 60_000;
@@ -539,9 +590,21 @@ let fpsLast = performance.now();
 
 const ORIGIN = new THREE.Vector3(0, 0, 0);
 const followWp = new THREE.Vector3();
+const tmpV = new THREE.Vector3();
+
+/** 小镇活跃度 → 太阳耀斑强度（0..1，映射今日 token / 预算） */
+let townActivity = 0;
+
+function setLabelDim(exceptId?: string): void {
+  for (const p of planets) {
+    const target = exceptId && p.body.id !== exceptId ? 0.15 : 1;
+    p.label.material.opacity += (target - p.label.material.opacity) * 0.15;
+  }
+}
 
 function animate(): void {
   requestAnimationFrame(animate);
+  if (document.hidden) { clockT.getDelta(); return; } // 后台标签页暂停渲染（省电）
   const dt = Math.min(clockT.getDelta(), 0.05);
   const t = clockT.elapsedTime;
 
@@ -560,10 +623,13 @@ function animate(): void {
   }
 
   if (sunMesh) {
-    sunMesh.scale.setScalar(1 + Math.sin(t * 1.6) * 0.012);
-    sunLight.intensity = 320 + Math.sin(t * 2.3) * 24;
+    const flare = 0.012 + townActivity * 0.035;            // 小镇越活跃，太阳越躁动
+    sunMesh.scale.setScalar(1 + Math.sin(t * 1.6) * flare);
+    sunLight.intensity = 320 + Math.sin(t * 2.3) * (24 + townActivity * 90);
   }
   if (sunMat) sunMat.uniforms.uTime.value = t;
+  if (sunGlow) sunGlow.scale.setScalar(16 * (1 + townActivity * 0.4));
+  setLabelDim(selectedId ?? undefined);
 
   for (const s of starMats) {
     s.mat.opacity = s.base + Math.sin(t * 1.7 + s.phase) * s.amp;
@@ -574,6 +640,30 @@ function animate(): void {
     p.holder.position.set(Math.cos(p.angle) * p.radius, 0, Math.sin(p.angle) * p.radius);
     p.mesh.rotation.y += dt * 0.6;
     for (const m of p.moons) m.pivot.rotation.y += m.speed * dt;
+
+    // 轨道拖尾：环形缓冲左移一格，写入当前世界坐标
+    if (p.trail && p.trailPos && p.trail.visible) {
+      p.trailPos.copyWithin(0, 3);
+      p.holder.getWorldPosition(tmpV);
+      const k = (p.trailPos.length - 3);
+      p.trailPos[k] = tmpV.x; p.trailPos[k + 1] = tmpV.y; p.trailPos[k + 2] = tmpV.z;
+      (p.trail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    }
+
+    // 小镇卫星连线端点刷新
+    if (p.moonLines) {
+      const meshes = p.moonLines.userData.moonMeshes as THREE.Mesh[];
+      const attr = p.moonLines.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const arr = attr.array as Float32Array;
+      for (let mi = 0; mi < meshes.length; mi++) {
+        meshes[mi].getWorldPosition(tmpV);
+        const base = mi * 6;
+        arr[base] = 0; arr[base + 1] = 0; arr[base + 2] = 0; // 行星中心（本地系）
+        meshes[mi].parent!.worldToLocal(tmpV);
+        arr[base + 3] = tmpV.x; arr[base + 4] = tmpV.y; arr[base + 5] = tmpV.z;
+      }
+      attr.needsUpdate = true;
+    }
   }
 
   // 跟拍：相机目标平滑追踪选中天体（关闭卡片即回到恒星并恢复自转）
