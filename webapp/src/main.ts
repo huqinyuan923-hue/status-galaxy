@@ -634,7 +634,7 @@ async function loadData(): Promise<void> {
   buildScene(BODIES, latest);
   townActivity = latest.town ? Math.min(1, latest.town.dailyTokens / 500_000) : 0;
   const alive = latest.sites.filter((s) => s.alive).length;
-  const total = latest.sites.length;
+  const total = BODIES.length; // 天体总数含暗星（无域名不探活）
   const ageMin = (Date.now() - new Date(latest.ts).getTime()) / 60_000;
   const stale = ageMin > 35 ? ` · 数据较旧(${Math.round(ageMin)}分前)` : '';
   const prefix = usingFixture ? '示例数据 · ' : '';
