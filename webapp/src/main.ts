@@ -67,7 +67,12 @@ function enterLowMode(): void {
   renderer.setSize(innerWidth, innerHeight);
   bloomPass.enabled = false;
   starLayers.slice(0, 2).forEach((p) => (p.visible = false));
-  for (const p of planets) if (p.trail) p.trail.visible = false; // 拖尾也关
+  for (const p of planets) {
+    if (p.trail) p.trail.visible = false; // 拖尾也关
+    if (p.moonLines) p.moonLines.visible = false; // 卫星连线/引力网也关
+  }
+  for (const m of otherMarkers) m.sprite.visible = false; // 同场探索者光点关
+  if (sunGlow) sunGlow.visible = false; // 大光晕交给 bloom 关闭后的本体
   fpsEl.textContent += ' · 省电模式';
 }
 
@@ -562,27 +567,36 @@ function stopFollow(): void {
 renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: Date.now() }; });
 
 /** 悬停引力连线 → 浮现居民对话备注（R12b） */
-renderer.domElement.addEventListener('pointermove', (e) => {
-  // 只在小镇被选中（卡片开着）时才检测连线，省射线
-  if (card.classList.contains('hidden') || !selectedId) { tooltip.classList.add('hidden'); return; }
+/** 引力连线拾取（hover 与移动端点按共用，R20） */
+function pickRelLine(e: { clientX: number; clientY: number }): { aName: string; bName: string; score: number; note: string } | null {
+  if (card.classList.contains('hidden') || !selectedId) return null;
   const townPv = planets.find((p) => p.body.probe === 'town');
   const relLines = townPv?.moonLines?.userData.relLines as THREE.LineSegments | undefined;
-  if (!relLines || !relLines.visible) { tooltip.classList.add('hidden'); return; }
-
+  if (!relLines || !relLines.visible) return null;
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObject(relLines, false);
-  const rels = relLines.userData.rels as Array<{ a: number; b: number; aName: string; bName: string; score: number; note: string }>;
+  const rels = relLines.userData.rels as Array<{ aName: string; bName: string; score: number; note: string }>;
   const idx = hits.length ? (hits[0].index as number) : -1;
-  const rel = idx >= 0 ? rels[idx] : undefined;
-  if (!rel) { tooltip.classList.add('hidden'); return; }
+  return idx >= 0 ? rels[idx] ?? null : null;
+}
+
+function showTooltip(e: { clientX: number; clientY: number }, rel: { aName: string; bName: string; score: number; note: string }): void {
   tooltip.innerHTML = `<div class="tt-who">${rel.aName} × ${rel.bName} · ${rel.score} 次互动</div>${rel.note ?? ''}`;
   tooltip.classList.remove('hidden');
   tooltip.style.left = `${Math.min(e.clientX + 16, innerWidth - 300)}px`;
   tooltip.style.top = `${Math.min(e.clientY + 14, innerHeight - 80)}px`;
+}
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  // 只在小镇被选中（卡片开着）时才检测连线，省射线
+  const rel = pickRelLine(e);
+  if (!rel) { tooltip.classList.add('hidden'); return; }
+  showTooltip(e, rel);
 });
 renderer.domElement.addEventListener('pointerleave', () => tooltip.classList.add('hidden'));
 
+// R20：移动端无 hover——点按连线时同样浮现备注（短按未命中星球且命中连线）
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6 || Date.now() - downAt.t > 450) return; // 拖拽不算点击
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -611,7 +625,11 @@ renderer.domElement.addEventListener('pointerup', (e) => {
       followDist = 0; // 太阳：不调整
     }
   } else {
+    // 未命中星球：R20 移动端适配——若命中引力连线则浮现备注（桌面 hover 的点按等价物）
+    const rel = pickRelLine(e);
+    if (rel) { showTooltip(e, rel); return; }
     card.classList.add('hidden');
+    tooltip.classList.add('hidden');
     stopFollow();
   }
 });
@@ -1032,6 +1050,9 @@ function animate(): void {
       if (geo && p.mesh.geometry !== geo) p.mesh.geometry = geo;
     }
     for (const m of p.moons) m.pivot.rotation.y += m.speed * dt;
+
+    // lowMode 下跳过拖尾/连线的逐帧刷新（不可见即不计算）
+    if (lowMode) continue;
 
     // 轨道拖尾：环形缓冲左移一格，写入当前世界坐标
     if (p.trail && p.trailPos && p.trail.visible) {
