@@ -18,7 +18,6 @@ interface PlanetVisual {
   group: THREE.Group;      // 轨道枢轴（绕恒星）
   holder: THREE.Group;     // 行星本体（含环/卫星/标签），挂在 group 上做公转
   mesh: THREE.Mesh;
-  glow: THREE.Sprite;
   label: THREE.Sprite;
   speed: number;
   dir: 1 | -1; // 公转方向：奇偶交替，星系更自然
@@ -72,7 +71,6 @@ function enterLowMode(): void {
     if (p.moonLines) p.moonLines.visible = false; // 卫星连线/引力网也关
   }
   for (const m of otherMarkers) m.sprite.visible = false; // 同场探索者光点关
-  if (sunGlow) sunGlow.visible = false; // 大光晕交给 bloom 关闭后的本体
   fpsEl.textContent += ' · 省电模式';
 }
 
@@ -125,20 +123,22 @@ function glowTexture(inner: string, outer: string): THREE.Texture {
 const haloTex = glowTexture('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)');
 
 // ---------- 真实行星贴图（Solar System Scope，CC BY 4.0；本地托管零外链） ----------
+// R26：贴图目录升级（桌面 4k / 移动 2k），路径与磁盘结构一致；云层固定 2k 足够
+const TEX_BASE = isMobile ? '/textures/2k' : '/textures/4k';
 const TEX = {
-  earth: '/textures/2k_earth_daymap.jpg',
-  clouds: '/textures/2k_earth_clouds.jpg',
-  jupiter: '/textures/2k_jupiter.jpg',
-  mars: '/textures/2k_mars.jpg',
-  mercury: '/textures/2k_mercury.jpg',
-  moon: '/textures/2k_moon.jpg',
-  neptune: '/textures/2k_neptune.jpg',
-  saturn: '/textures/2k_saturn.jpg',
-  uranus: '/textures/2k_uranus.jpg',
+  earth: `${TEX_BASE}/earth_daymap.jpg`,
+  clouds: '/textures/2k/earth_clouds.jpg',
+  jupiter: `${TEX_BASE}/jupiter.jpg`,
+  mars: `${TEX_BASE}/mars.jpg`,
+  mercury: `${TEX_BASE}/mercury.jpg`,
+  moon: `${TEX_BASE}/moon.jpg`,
+  neptune: `${TEX_BASE}/neptune.jpg`,
+  saturn: `${TEX_BASE}/saturn.jpg`,
+  uranus: `${TEX_BASE}/uranus.jpg`,
 } as const;
 
-/** 天体 → 贴图（theme 赋值；tint 可对同贴图做色相偏移） */
-const BODY_TEX: Record<string, { tex: string; tint?: number }> = {
+/** 天体 → 贴图（R26：去掉 tint，贴图本色示人） */
+const BODY_TEX: Record<string, { tex: string }> = {
   town: { tex: TEX.earth },
   arcade: { tex: TEX.jupiter },
   cha: { tex: TEX.mars },
@@ -147,11 +147,11 @@ const BODY_TEX: Record<string, { tex: string; tint?: number }> = {
   toolbox: { tex: TEX.moon },
   rss: { tex: TEX.neptune },
   wrapped: { tex: TEX.saturn },
-  salary: { tex: TEX.moon, tint: 0xffd9a0 },
-  pomo: { tex: TEX.mars, tint: 0xffb080 },
-  filekit: { tex: TEX.uranus, tint: 0xa8ffd9 },
-  cet4: { tex: TEX.neptune, tint: 0x9fc0ff },
-  treasury: { tex: TEX.moon, tint: 0xa8ffc8 },
+  salary: { tex: TEX.moon },
+  pomo: { tex: TEX.mars },
+  filekit: { tex: TEX.uranus },
+  cet4: { tex: TEX.neptune },
+  treasury: { tex: TEX.moon },
   imgbed: { tex: TEX.moon },
   timemark: { tex: TEX.mercury },
 };
@@ -253,7 +253,6 @@ function labelSprite(text: string, color = '#c7d6f2', size = 42): THREE.Sprite {
 const planets: PlanetVisual[] = [];
 const clickables: THREE.Mesh[] = [];
 let sunMesh: THREE.Mesh | null = null;
-let sunGlow: THREE.Sprite | null = null;
 let data: GalaxyData = FIXTURE_DATA;
 
 function hsl(h: number, s: number, l: number): number {
@@ -280,7 +279,6 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
   planets.length = 0;
   clickables.length = 0;
   if (sunMesh) { scene.remove(sunMesh); sunMesh = null; }
-  if (sunGlow) { scene.remove(sunGlow); sunGlow = null; }
 
   const repoByBody = new Map<string, (typeof snap.repos)[number]>();
   for (const b of bodies) {
@@ -304,9 +302,6 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     sunMesh.userData = { body: sun };
     scene.add(sunMesh);
     clickables.push(sunMesh);
-    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: 0xffb347, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
-    sunGlow.scale.setScalar(9);
-    scene.add(sunGlow);
     const label = labelSprite('博客', '#ffd9a0', 46);
     label.position.set(0, 5.6, 0);
     scene.add(label);
@@ -350,18 +345,18 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     ];
     const bodyTexCfg = BODY_TEX[body.id];
     const tex = bodyTexCfg ? loadTex(bodyTexCfg.tex) : null;
-    const tint = bodyTexCfg?.tint ?? null;
     if (tex) {
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 斜视角清晰
     }
     const mesh = new THREE.Mesh(
       lods[0][1],
       new THREE.MeshStandardMaterial({
-        ...(tex ? { map: tex } : { color }),
-        ...(tint ? { color: tint } : {}),
-        // 自发光降到 0.08：贴图自己说话，不再被色光冲淡（R25 修复「看着糊」）
-        emissive,
-        emissiveIntensity: alive === false ? 0.22 : body.kind === 'dark' ? 0.12 : 0.08,
+        // R26：有贴图=本色示人；emissiveMap 用同贴图微光保底（细节在暗面也不糊掉）
+        ...(tex
+          ? alive === false
+            ? { map: tex, color: 0xffffff, emissive: 0x5a1414, emissiveIntensity: 0.35 }
+            : { map: tex, color: 0xffffff, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.16 }
+          : { color, emissive }),
         roughness: 0.85,
         metalness: 0.02,
         ...(body.kind === 'dark' ? { transparent: true, opacity: 0.55 } : {}),
@@ -401,18 +396,7 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
       holder.add(makeAtmosphere(r, color, 0.5));
     }
 
-    // 光晕：健康绿色调，暗星无，挂掉的暗红
-    // 光晕：克制的薄边（R25 修复——之前的大光团把贴图模型全吞了）
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: haloTex,
-      color: alive === false ? 0xff5252 : body.kind === 'dark' ? 0x556070 : new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.45).getHex(),
-      transparent: true,
-      opacity: body.kind === 'dark' ? 0.06 : alive === false ? 0.2 : 0.16,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }));
-    glow.scale.setScalar(r * 1.7);
-    holder.add(glow);
+    // R25+用户反馈：光晕完全移除——贴图模型必须全裸可见；掉线星球由材质自发光红色表达
 
     // 环 = 有独立域名
     if (body.kind !== 'dark') {
@@ -494,7 +478,7 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
     scene.add(trail);
 
     planets.push({
-      body, group, holder, mesh, glow, label, moons,
+      body, group, holder, mesh, label, moons,
       trail, trailPos,
       ...(moonLines ? { moonLines } : {}),
       speed: orbitSpeed(repo?.pushedAt ?? null),
@@ -1023,13 +1007,17 @@ function flashPlanet(questId: string): void {
   const bodyId = map[questId];
   const pv = planets.find((p) => p.body.id === bodyId);
   if (!pv) return;
-  const orig = pv.glow.material.opacity;
-  pv.glow.material.opacity = 1;
-  pv.glow.scale.multiplyScalar(1.6);
-  setTimeout(() => {
-    pv.glow.material.opacity = orig;
-    pv.glow.scale.divideScalar(1.6);
-  }, 1200);
+  // R26：自发光脉冲（光晕已移除）——临时拉高 emissiveIntensity 再回落
+  const mat = pv.mesh.material as THREE.MeshStandardMaterial;
+  const orig = mat.emissiveIntensity;
+  const start = performance.now();
+  const tick = () => {
+    const t = (performance.now() - start) / 1400;
+    if (t >= 1) { mat.emissiveIntensity = orig; return; }
+    mat.emissiveIntensity = orig + (0.8 - orig) * Math.sin(t * Math.PI);
+    requestAnimationFrame(tick);
+  };
+  tick();
 }
 
 function supernova(): void {
@@ -1095,10 +1083,6 @@ function animate(): void {
     sunLight.intensity = 320 + Math.sin(t * 2.3) * (24 + townActivity * 90);
   }
   if (sunMat) sunMat.uniforms.uTime.value = t;
-  if (sunGlow) {
-    sunGlow.scale.setScalar(9 * (1 + townActivity * 0.35));
-    sunGlow.material.opacity = 0.5 + Math.sin(t * 1.1) * 0.08;
-  }
   setLabelDim(selectedId ?? undefined);
 
   for (const s of starMats) {
