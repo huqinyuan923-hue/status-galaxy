@@ -26,6 +26,14 @@ export interface RepoTelemetry {
   openIssues: number;
 }
 
+export interface TownRelationship {
+  a: number;
+  b: number;
+  aName: string;
+  bName: string;
+  score: number;
+}
+
 export interface TownTelemetry {
   agents: number;
   gameTime: number;
@@ -33,6 +41,7 @@ export interface TownTelemetry {
   tickCount: number;
   dailyTokens: number;
   silent: boolean;
+  relationships?: TownRelationship[];
 }
 
 export interface Snapshot {
@@ -73,7 +82,10 @@ export const FIXTURE_DATA: GalaxyData = {
       { repo: 'huqinyuan923-hue/cha-lang', stars: 2, sizeKb: 1212, language: 'TypeScript', pushedAt: '2026-10-23T00:00:00Z', openIssues: 0 },
       { repo: 'huqinyuan923-hue/imgbed', stars: 0, sizeKb: 26, language: 'JavaScript', pushedAt: '2026-10-21T00:00:00Z', openIssues: 0 },
     ],
-    town: { agents: 12, gameTime: 550, clock: '09:10', tickCount: 22, dailyTokens: 16805, silent: false },
+    town: { agents: 12, gameTime: 550, clock: '09:10', tickCount: 22, dailyTokens: 16805, silent: false, relationships: [
+      { a: 1, b: 9, aName: '阿茶', bName: '小码', score: 4 },
+      { a: 2, b: 8, aName: '猫叔', bName: '老湖', score: 3 },
+    ] },
   },
   history: [],
 };

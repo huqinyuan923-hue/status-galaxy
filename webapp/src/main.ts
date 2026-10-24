@@ -379,6 +379,21 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
       }));
       moonLines.userData = { moonMeshes };
       holder.add(moonLines);
+
+      // R12 引力连线：居民关系 → 卫星间的动态连线（分数越高越亮，vertexColors 编码）
+      const rels = snap.town.relationships ?? [];
+      const relPos = new Float32Array(rels.length * 2 * 3);
+      const relCol = new Float32Array(rels.length * 2 * 3);
+      const relGeo = new THREE.BufferGeometry();
+      relGeo.setAttribute('position', new THREE.BufferAttribute(relPos, 3));
+      relGeo.setAttribute('color', new THREE.BufferAttribute(relCol, 3));
+      const relLines = new THREE.LineSegments(relGeo, new THREE.LineBasicMaterial({
+        vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      // 卫星按居民 id 顺序创建（/api/status agents 按 id 排序，id 从 1 起）
+      relLines.userData = { rels, moonMeshes };
+      holder.add(relLines);
+      moonLines.userData = { moonMeshes, relLines };
     }
 
     // 轨道拖尾：世界坐标环形缓冲（省电模式下隐藏）
@@ -449,6 +464,10 @@ function showCard(body: FixtureBody) {
     <dt>Star</dt><dd>${repo?.stars ?? '—'}</dd>
     <dt>最近提交</dt><dd>${fmtAgo(repo?.pushedAt ?? null)}</dd>
     ${body.probe === 'town' && snap.town ? `<dt>小镇</dt><dd class="ok">${snap.town.agents} 居民 · ${snap.town.clock} · 今日 ${snap.town.dailyTokens.toLocaleString()} tok</dd>` : ''}
+    ${body.probe === 'town' && snap.town?.relationships?.length ? (() => {
+      const top = [...snap.town.relationships].sort((x, y) => y.score - x.score)[0];
+      return `<dt>最铁关系</dt><dd>${top.aName} × ${top.bName}（${top.score} 次互动）</dd><dt>关系网</dt><dd>${snap.town.relationships.length} 条引力连线</dd>`;
+    })() : ''}
   `;
 
   const links = document.getElementById('card-links')!;
@@ -599,6 +618,7 @@ let fpsLast = performance.now();
 const ORIGIN = new THREE.Vector3(0, 0, 0);
 const followWp = new THREE.Vector3();
 const tmpV = new THREE.Vector3();
+const tmpV2 = new THREE.Vector3();
 
 /** 小镇活跃度 → 太阳耀斑强度（0..1，映射今日 token / 预算） */
 let townActivity = 0;
@@ -658,9 +678,10 @@ function animate(): void {
       (p.trail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
     }
 
-    // 小镇卫星连线端点刷新
+    // 小镇卫星连线端点刷新 + 引力连线（关系图谱）
     if (p.moonLines) {
-      const meshes = p.moonLines.userData.moonMeshes as THREE.Mesh[];
+      const ud = p.moonLines.userData as { moonMeshes: THREE.Mesh[]; relLines?: THREE.LineSegments };
+      const meshes = ud.moonMeshes;
       const attr = p.moonLines.geometry.getAttribute('position') as THREE.BufferAttribute;
       const arr = attr.array as Float32Array;
       for (let mi = 0; mi < meshes.length; mi++) {
@@ -671,6 +692,37 @@ function animate(): void {
         arr[base + 3] = tmpV.x; arr[base + 4] = tmpV.y; arr[base + 5] = tmpV.z;
       }
       attr.needsUpdate = true;
+
+      const relLines = ud.relLines;
+      if (relLines) {
+        const rels = relLines.userData.rels as Array<{ a: number; b: number; score: number }>;
+        const rAttr = relLines.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const cAttr = relLines.geometry.getAttribute('color') as THREE.BufferAttribute;
+        const rArr = rAttr.array as Float32Array;
+        const cArr = cAttr.array as Float32Array;
+        const maxScore = Math.max(1, ...rels.map((r) => r.score));
+        for (let ri = 0; ri < rels.length; ri++) {
+          const rel = rels[ri];
+          const ma = meshes[rel.a - 1];
+          const mb = meshes[rel.b - 1];
+          if (!ma || !mb) continue;
+          const base = ri * 6;
+          ma.getWorldPosition(tmpV);
+          ma.parent!.worldToLocal(tmpV);
+          rArr[base] = tmpV.x; rArr[base + 1] = tmpV.y; rArr[base + 2] = tmpV.z;
+          mb.getWorldPosition(tmpV2);
+          mb.parent!.worldToLocal(tmpV2);
+          rArr[base + 3] = tmpV2.x; rArr[base + 4] = tmpV2.y; rArr[base + 5] = tmpV2.z;
+          // 亮度：分数归一 → 蓝→金渐变（金=最铁）
+          const s = Math.min(1, rel.score / maxScore);
+          const cr = 0.35 + s * 0.85, cg = 0.55 + s * 0.35, cb = 1.0 - s * 0.25;
+          for (let e = 0; e < 2; e++) {
+            cArr[base + e * 3] = cr; cArr[base + e * 3 + 1] = cg; cArr[base + e * 3 + 2] = cb;
+          }
+        }
+        rAttr.needsUpdate = true;
+        cAttr.needsUpdate = true;
+      }
     }
   }
 

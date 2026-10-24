@@ -20,6 +20,14 @@ export interface RepoTelemetry {
   openIssues: number;
 }
 
+export interface TownRelationship {
+  a: number;
+  b: number;
+  aName: string;
+  bName: string;
+  score: number;
+}
+
 export interface TownTelemetry {
   agents: number;
   gameTime: number;
@@ -27,6 +35,8 @@ export interface TownTelemetry {
   tickCount: number;
   dailyTokens: number;
   silent: boolean;
+  /** 居民关系图谱（R12：星图引力连线数据源），agent id 从 1 连续编号 */
+  relationships?: TownRelationship[];
 }
 
 export interface GalaxySnapshot {
@@ -123,6 +133,7 @@ export async function probeTown(fetchFn: FetchLike = fetch): Promise<TownTelemet
       world?: { gameTime: number; clock: string; tickCount: number };
       spend?: { dailyTokens: number; silent: boolean };
       agents?: unknown[];
+      relationships?: TownRelationship[];
     };
     if (!j.world) return null;
     return {
@@ -132,6 +143,11 @@ export async function probeTown(fetchFn: FetchLike = fetch): Promise<TownTelemet
       tickCount: j.world.tickCount,
       dailyTokens: j.spend?.dailyTokens ?? 0,
       silent: j.spend?.silent ?? false,
+      relationships: Array.isArray(j.relationships)
+        ? j.relationships
+            .filter((r) => r && Number.isFinite(r.a) && Number.isFinite(r.b))
+            .slice(0, 40)
+        : [],
     };
   } catch {
     return null;
