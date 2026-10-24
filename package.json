@@ -1,0 +1,24 @@
+{
+  "name": "status-galaxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix webapp run build && wrangler dev",
+    "dev:api": "wrangler dev",
+    "webapp:dev": "npm --prefix webapp run dev",
+    "webapp:build": "npm --prefix webapp run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply status-galaxy --local",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20250101.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.0.0"
+  }
+}
