@@ -81,7 +81,7 @@ controls.minDistance = 12;
 controls.maxDistance = 160;
 controls.maxPolarAngle = Math.PI * 0.85;
 controls.autoRotate = true;
-controls.autoRotateSpeed = 0.25;
+controls.autoRotateSpeed = 0.12;
 
 // ---------- 星场（带闪烁相位） ----------
 const starMats: Array<{ mat: THREE.PointsMaterial; base: number; phase: number; amp: number }> = [];
@@ -264,9 +264,10 @@ function planetRadius(sizeKb: number): number {
 }
 
 function orbitSpeed(pushedAt: string | null): number {
-  if (!pushedAt) return 0.08;
+  // R28：全局降速（0.35×）——观星模式，行星慢悠悠地走
+  if (!pushedAt) return 0.08 * 0.35;
   const days = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000;
-  return 0.1 + 0.55 * Math.exp(-days / 10);
+  return (0.1 + 0.55 * Math.exp(-days / 10)) * 0.35;
 }
 
 function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
@@ -432,7 +433,7 @@ function buildScene(bodies: FixtureBody[], snapIn: GalaxyData['latest']) {
         moon.position.x = moonR;
         pivot.add(moon);
         holder.add(pivot);
-        moons.push({ pivot, speed: 0.6 + (m % 3) * 0.25 });
+        moons.push({ pivot, speed: 0.22 + (m % 3) * 0.09 });
         moonMeshes.push(moon);
       }
       // 卫星连线（每帧更新端点）
@@ -768,7 +769,7 @@ function renderOtherExplorers(others: Array<{ id: number; name: string; level: n
     label.position.y = 1.4;
     sprite.add(label);
     otherGroup.add(sprite);
-    otherMarkers.push({ sprite, angle, radius, speed: 0.3 + i * 0.05, name: o.name });
+    otherMarkers.push({ sprite, angle, radius, speed: 0.11 + i * 0.02, name: o.name });
   });
 }
 let ship: THREE.Group | null = null;
@@ -1092,7 +1093,7 @@ function animate(): void {
   for (const p of planets) {
     p.angle += p.speed * p.dir * dt;
     p.holder.position.set(Math.cos(p.angle) * p.radius, 0, Math.sin(p.angle) * p.radius);
-    p.mesh.rotation.y += dt * 0.6;
+    p.mesh.rotation.y += dt * 0.25; // 自转也放慢（R28）
     const clouds = p.holder.userData.clouds as THREE.Mesh | undefined;
     if (clouds) clouds.rotation.y += dt * 0.22; // 云层独立慢转
 
