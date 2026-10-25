@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261024T123141522Z-47820-042025b7f347",
+  "runId": "20261024T123141522Z-47820-042025b7f347",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "63730cf55d05e62e43100a3017ca86142ef67a4e",
+  "diffHash": "24a396084327b5849725b050af4e90bb18d3355146cc0c0466fd15b633f1d57a",
+  "rulesVersion": "unavailable",
+  "sessionHash": "1290462f6617af24b584793df77f5663777cd3601e57c969044666c3c45b1734",
+  "reportRef": ".mimosa/reports/task-review-sess_40964ecb-3513-4e26-9744-e9761f5aece8-20261024T123141522Z-47820-042025b7f347.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [
+    {
+      "file": "src/quest/catalog.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/quest-catalog.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/quest/routes.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/quest-api.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-10-24T12:31:41.999Z"
+}

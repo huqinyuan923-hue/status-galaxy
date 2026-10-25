@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261024T114038301Z-26696-098fcc8094be",
+  "runId": "20261024T114038301Z-26696-098fcc8094be",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": ".",
+        "detail": "baseline capture had enumeration or snapshot errors",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": ".",
+        "detail": "baseline_partial: baseline capture had enumeration or snapshot errors",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "316b19cb63283dfd099a20de4eebc82864e12bfd",
+  "diffHash": "a5549811a0c056babc9742f4e0c4bee388880ed99d296a8d540d0edcbb26d23f",
+  "rulesVersion": "unavailable",
+  "sessionHash": "1290462f6617af24b584793df77f5663777cd3601e57c969044666c3c45b1734",
+  "reportRef": ".mimosa/reports/task-review-sess_40964ecb-3513-4e26-9744-e9761f5aece8-20261024T114038301Z-26696-098fcc8094be.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-b936a5e7c8a57f912b6c12c2",
+    "mimosa-b39dbcff98ff31bd22c4762b",
+    "mimosa-16e2dcd94cda59bfe57a60f1",
+    "mimosa-2b577149a9597820b39fc119"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "src/collector.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/fixture.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/main.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/index.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "tests/quest.test.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/quest/routes.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/quest-api.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "webapp/src/quest-ui.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-10-24T11:40:38.780Z"
+}

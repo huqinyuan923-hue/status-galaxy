@@ -26,8 +26,32 @@
     </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🌌</text></svg>" />
     <link rel="stylesheet" href="/src/style.css" />
+    <style>
+      /* 进站动画：星图对齐（每会话一次） */
+      #boot{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#020409;font-family:system-ui,sans-serif;animation:gxOut .6s ease 2.1s forwards}
+      #boot .g-stars{display:flex;gap:22px}
+      #boot .g-stars i{width:6px;height:6px;border-radius:50%;background:#7dd3fc;box-shadow:0 0 10px #7dd3fc;opacity:0;animation:gxTwinkle .5s ease both}
+      #boot .g-stars i:nth-child(1){animation-delay:.3s}
+      #boot .g-stars i:nth-child(2){animation-delay:.5s}
+      #boot .g-stars i:nth-child(3){animation-delay:.7s}
+      #boot .g-stars i:nth-child(4){animation-delay:.9s}
+      #boot .g-stars i:nth-child(5){animation-delay:1.1s}
+      #boot .g-logo{color:#e2e8f0;font-size:clamp(24px,5vw,42px);font-weight:800;letter-spacing:.06em;opacity:0;animation:gxIn .5s ease 1.2s both}
+      #boot .g-logo em{font-style:normal;background:linear-gradient(90deg,#7dd3fc,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+      #boot .g-sub{font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.15em;color:#64748b;opacity:0;animation:gxIn .35s ease 1.6s both}
+      @keyframes gxIn{from{opacity:0;transform:translateY(10px)}}
+      @keyframes gxTwinkle{0%{opacity:0;transform:scale(.2)}60%{opacity:1;transform:scale(1.4)}100%{opacity:1;transform:scale(1)}}
+      @keyframes gxOut{to{opacity:0;visibility:hidden;transform:scale(1.05)}}
+      @media (prefers-reduced-motion:reduce){#boot{display:none}}
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <div class="g-stars"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="g-logo">星图 <em>GALAXY</em></div>
+      <div class="g-sub">DIGITAL TWIN · REALTIME</div>
+    </div>
+    <script>try{if(sessionStorage.getItem('boot-seen')){var b=document.getElementById('boot');b&&(b.style.display='none')}else{sessionStorage.setItem('boot-seen','1')}}catch(e){}</script>
     <div id="app"></div>
     <header id="hud">
       <h1>ADCakeyuan <span>星图</span></h1>

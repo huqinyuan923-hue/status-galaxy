@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-delivery-20261024T061029708Z-34768-629ae06ab60f",
+  "runId": "20261024T061029708Z-34768-629ae06ab60f",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "StopDelivery"
+  },
+  "revision": "d53fecb90ebcb56df13a2f0799552a7f7b606686",
+  "diffHash": "61007eead7b8fb281a41f1744f7e03e92e96ae416b755de0f8b4f2a830380092",
+  "rulesVersion": "unavailable",
+  "sessionHash": "1290462f6617af24b584793df77f5663777cd3601e57c969044666c3c45b1734",
+  "reportRef": ".mimosa/reports/task-review-sess_40964ecb-3513-4e26-9744-e9761f5aece8-20261024T061029708Z-34768-629ae06ab60f.json",
+  "events": [
+    {
+      "eventId": "hook-fde4d1521491ceb24ae442b2459bc8ba",
+      "findingId": "mimosa-4647af4b89bd8ca212a2f32a",
+      "type": "finding_blocked",
+      "at": "2026-10-24T06:10:30.295Z",
+      "identity": {
+        "projectRelativeFile": ".wrangler/tmp/dev-xSAug4/index.js",
+        "ruleId": "security",
+        "codeEvidenceHash": "0ad139c3ab15693bc321ad0aa9a1812bf1ae44e8d23914e8afe920312fb56e5d",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 548,
+      "endLine": 548,
+      "reasonCode": "stop_rewake",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "0ad139c3ab15693bc321ad0aa9a1812bf1ae44e8d23914e8afe920312fb56e5d"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-8a456196f25b2277169fc6db64a3fd67",
+      "findingId": "mimosa-a317c235f1fdd491798bf094",
+      "type": "finding_blocked",
+      "at": "2026-10-24T06:10:30.295Z",
+      "identity": {
+        "projectRelativeFile": ".wrangler/tmp/dev-xSAug4/index.js",
+        "ruleId": "security",
+        "codeEvidenceHash": "a4905b06f628abb21db96f2c3031cb3a619e4fdcab787b9e4f958464d7d7ab56",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 1749,
+      "endLine": 1749,
+      "reasonCode": "stop_rewake",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "a4905b06f628abb21db96f2c3031cb3a619e4fdcab787b9e4f958464d7d7ab56"
+      },
+      "sequence": 1
+    }
+  ],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-10-24T06:10:30.923Z"
+}

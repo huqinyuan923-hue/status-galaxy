@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261024T054305958Z-36768-66e86fbb648e",
+  "runStatus": "inconclusive",
+  "errors": [
+    "baseline-read:package-lock.json: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:webapp/package-lock.json: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/dev-xO7ckz/index.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/dev-CiysuF/index.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/dev-1JnBxn/index.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-Qjhiae/middleware-insertion-facade.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-Qjhiae/middleware-loader.entry.ts: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-nbdMTa/middleware-insertion-facade.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-nbdMTa/middleware-loader.entry.ts: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-i3Ynu3/middleware-insertion-facade.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-i3Ynu3/middleware-loader.entry.ts: baseline_snapshot_unreadable: file is missing from task baseline",
+    "scan:src/bodies.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:src/collector.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:src/index.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:tests/collector.test.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:webapp/vite.config.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:webapp/src/fixture.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:webapp/src/main.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/dev-xO7ckz/index.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/dev-CiysuF/index.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/dev-1JnBxn/index.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-Qjhiae/middleware-insertion-facade.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-Qjhiae/middleware-loader.entry.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-nbdMTa/middleware-insertion-facade.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-nbdMTa/middleware-loader.entry.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-i3Ynu3/middleware-insertion-facade.js: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:.wrangler/tmp/bundle-i3Ynu3/middleware-loader.entry.ts: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "supply-chain-check:.: stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+  ],
+  "target": ".",
+  "revision": "0355cbb1fc8e77050134b5dfbbd4c9a87b493afb",
+  "diffHash": "492a7967a1d925cea1e53f4a565ef2611ef0436e9f9ac7edf02f162ac94be610",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-24T05:43:05.958Z",
+  "timing": {
+    "startedAt": "2026-10-24T05:43:03.260Z",
+    "completedAt": "2026-10-24T05:43:05.958Z",
+    "durationMs": 2698
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 3,
+    "bySeverity": {
+      "high": 3
+    },
+    "byStatus": {
+      "candidate": 3
+    }
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "baseline_snapshot_unreadable": 11,
+      "scanner_failed": 16,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 28
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_40964ecb-3513-4e26-9744-e9761f5aece8-20261024T054305958Z-36768-66e86fbb648e.json"
+}

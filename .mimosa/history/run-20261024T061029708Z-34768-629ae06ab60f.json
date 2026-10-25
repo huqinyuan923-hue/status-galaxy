@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261024T061029708Z-34768-629ae06ab60f",
+  "runStatus": "inconclusive",
+  "errors": [
+    "baseline-read:.wrangler/tmp/dev-xSAug4/index.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-DNk4HH/middleware-insertion-facade.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:.wrangler/tmp/bundle-DNk4HH/middleware-loader.entry.ts: baseline_snapshot_unreadable: file is missing from task baseline"
+  ],
+  "target": ".",
+  "revision": "d53fecb90ebcb56df13a2f0799552a7f7b606686",
+  "diffHash": "61007eead7b8fb281a41f1744f7e03e92e96ae416b755de0f8b4f2a830380092",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-24T06:10:29.708Z",
+  "timing": {
+    "startedAt": "2026-10-24T06:10:27.542Z",
+    "completedAt": "2026-10-24T06:10:29.708Z",
+    "durationMs": 2166
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 6,
+    "bySeverity": {
+      "high": 6
+    },
+    "byStatus": {
+      "candidate": 4,
+      "blocked": 2
+    }
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "baseline_snapshot_unreadable": 3,
+      "project_check_failed": 3
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_40964ecb-3513-4e26-9744-e9761f5aece8-20261024T061029708Z-34768-629ae06ab60f.json"
+}
